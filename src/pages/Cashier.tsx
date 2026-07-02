@@ -3,7 +3,7 @@ import api from '@/lib/api';
 import type { MenuItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Trash2, CreditCard, AlertCircle, Loader2, RefreshCw, X } from 'lucide-react';
+import { Trash2, CreditCard, Loader2, RefreshCw, X } from 'lucide-react';
 
 export default function CashierPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -13,7 +13,7 @@ export default function CashierPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Modal for modifiers
+  // Modifiers Modal
   const [showModifiersModal, setShowModifiersModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
@@ -22,10 +22,11 @@ export default function CashierPage() {
   const fetchMenu = async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await api.get('/menu');
       setMenuItems(res.data || []);
     } catch (err: any) {
-      setError("Cannot connect to backend.");
+      setError("Cannot connect to backend. Is the server running?");
     } finally {
       setLoading(false);
     }
@@ -37,7 +38,7 @@ export default function CashierPage() {
 
   const openModifiersModal = (item: MenuItem) => {
     setSelectedItem(item);
-    setSelectedModifiers([]);
+    setSelectedModifiers(item.modifiers || []);
     setCustomNote('');
     setShowModifiersModal(true);
   };
@@ -48,7 +49,7 @@ export default function CashierPage() {
     const cartItem = {
       ...selectedItem,
       quantity: 1,
-      modifiers: [...selectedModifiers],
+      modifiers: selectedModifiers,
       note: customNote.trim()
     };
 
@@ -81,7 +82,26 @@ export default function CashierPage() {
     return `http://localhost:5032${item.imageUrl.startsWith('/') ? '' : '/'}${item.imageUrl}`;
   };
 
-  if (loading) return <div className="flex items-center justify-center h-[70vh]"><Loader2 className="w-10 h-10 animate-spin" /></div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-amber-600 mb-4" />
+        <p className="text-zinc-500">Loading menu...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] text-center px-6">
+        <p className="text-red-600 font-medium mb-2">Failed to load menu</p>
+        <p className="text-zinc-500 mb-6">{error}</p>
+        <Button onClick={fetchMenu} className="gap-2">
+          <RefreshCw className="w-4 h-4" /> Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[calc(100vh-120px)]">
@@ -101,7 +121,7 @@ export default function CashierPage() {
           {filteredMenu.map(item => (
             <div 
               key={item.id}
-              className="border border-zinc-200 dark:border-zinc-700 rounded-3xl p-4 cursor-pointer hover:border-amber-600 hover:shadow-xl transition-all"
+              className="border border-zinc-200 dark:border-zinc-700 rounded-3xl p-4 cursor-pointer hover:border-amber-600 hover:shadow-xl transition-all active:scale-[0.985]"
               onClick={() => openModifiersModal(item)}
             >
               <div className="h-40 bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-4 overflow-hidden relative">
@@ -119,13 +139,15 @@ export default function CashierPage() {
         </div>
       </div>
 
-      {/* Cart */}
+      {/* Cart Section */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col">
         <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
         
-        <div className="flex-1 overflow-auto space-y-4">
+        <div className="flex-1 overflow-auto space-y-4 pr-2">
           {cart.length === 0 ? (
-            <div className="text-center py-20 text-zinc-500">Tap items to add to order</div>
+            <div className="text-center py-20 text-zinc-500">
+              Your cart is empty.<br />Tap items to add.
+            </div>
           ) : (
             cart.map((item, idx) => (
               <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
@@ -135,11 +157,16 @@ export default function CashierPage() {
                     {item.modifiers && item.modifiers.length > 0 && (
                       <p className="text-xs text-amber-600">+ {item.modifiers.join(", ")}</p>
                     )}
-                    {item.note && <p className="text-xs text-zinc-500">Note: {item.note}</p>}
+                    {item.note && <p className="text-xs text-zinc-500 mt-1">Note: {item.note}</p>}
                   </div>
                   <p className="font-semibold">₱{(item.price * item.quantity).toFixed(2)}</p>
                 </div>
-                <Button variant="ghost" size="sm" className="text-red-500 mt-2" onClick={() => removeFromCart(idx)}>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-red-500 mt-2" 
+                  onClick={() => removeFromCart(idx)}
+                >
                   Remove
                 </Button>
               </div>
@@ -148,12 +175,18 @@ export default function CashierPage() {
         </div>
 
         <div className="border-t pt-6 mt-auto">
-          <div className="flex justify-between text-3xl font-bold mb-6">
-            <span>Total</span>
+          <div className="flex justify-between text-4xl font-bold mb-6">
+            <span className="text-xl text-zinc-500">Total</span>
             <span>₱{total.toFixed(2)}</span>
           </div>
-          <Button onClick={checkout} className="w-full py-8 text-lg" disabled={cart.length === 0}>
-            <CreditCard className="mr-3" /> Complete Payment
+          
+          <Button 
+            onClick={checkout} 
+            className="w-full py-8 text-lg font-semibold"
+            disabled={cart.length === 0}
+          >
+            <CreditCard className="mr-3 w-6 h-6" /> 
+            Complete Payment
           </Button>
         </div>
       </div>
@@ -173,10 +206,9 @@ export default function CashierPage() {
                 </Button>
               </div>
 
-              {/* Modifiers */}
               {selectedItem.modifiers && selectedItem.modifiers.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="font-medium mb-3">Add-ons / Modifiers</h3>
+                  <h3 className="font-medium mb-3">Modifiers / Add-ons</h3>
                   <div className="grid grid-cols-2 gap-2">
                     {selectedItem.modifiers.map((mod, i) => (
                       <label key={i} className="flex items-center gap-2 border rounded-xl p-3 cursor-pointer hover:bg-zinc-50">
@@ -201,7 +233,7 @@ export default function CashierPage() {
               <div>
                 <label className="block text-sm font-medium mb-2">Special Requests / Notes</label>
                 <Input 
-                  placeholder="E.g. No ice, extra sugar, etc."
+                  placeholder="No ice, extra sugar, etc."
                   value={customNote}
                   onChange={(e) => setCustomNote(e.target.value)}
                 />
