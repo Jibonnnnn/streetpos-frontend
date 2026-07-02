@@ -3,7 +3,7 @@ import api from '@/lib/api';
 import type { MenuItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Trash2, CreditCard, Loader2, RefreshCw, X } from 'lucide-react';
+import { CreditCard, Loader2, RefreshCw, X } from 'lucide-react';
 
 export default function CashierPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
