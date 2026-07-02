@@ -24,10 +24,10 @@ export default function MenuPage() {
     price: 0,
     availableFrom: '',
     availableUntil: '',
-    modifiers: [] as string[],
   });
 
-  const categories = ['All', 'Coffee', 'Tea', 'Pastry', 'Breakfast', 'Sandwich', 'Dessert', 'Other'];
+  // Predefined categories
+  const categories = ['Coffee', 'Non-Coffee', 'Tea', 'Pastry', 'Breakfast', 'Sandwich', 'Dessert', 'Other'];
 
   useEffect(() => {
     fetchMenu();
@@ -68,7 +68,6 @@ export default function MenuPage() {
         price: item.price,
         availableFrom: item.availableFrom ? item.availableFrom.slice(0, 5) : '',
         availableUntil: item.availableUntil ? item.availableUntil.slice(0, 5) : '',
-        modifiers: item.modifiers || [],
       });
       setImagePreview(item.imageUrl || null);
     } else {
@@ -79,8 +78,7 @@ export default function MenuPage() {
         category: '', 
         price: 0, 
         availableFrom: '', 
-        availableUntil: '', 
-        modifiers: [] 
+        availableUntil: '' 
       });
       setImagePreview(null);
     }
@@ -141,16 +139,9 @@ export default function MenuPage() {
     }
   };
 
-  // Get full image URL (handles both old and new backend)
   const getImageUrl = (item: MenuItem): string | null => {
     if (!item.imageUrl) return null;
-    
-    if (item.imageUrl.startsWith('/api/menu')) {
-      return `http://localhost:5032${item.imageUrl}`;
-    }
-    if (item.imageUrl.startsWith('http')) {
-      return item.imageUrl;
-    }
+    if (item.imageUrl.startsWith('http')) return item.imageUrl;
     return `http://localhost:5032${item.imageUrl.startsWith('/') ? '' : '/'}${item.imageUrl}`;
   };
 
@@ -181,7 +172,10 @@ export default function MenuPage() {
           onChange={(e) => setSelectedCategory(e.target.value)}
           className="px-4 py-3 rounded-2xl border border-input bg-background text-sm"
         >
-          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          <option value="All">All Categories</option>
+          {categories.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
         </select>
       </div>
 
@@ -195,10 +189,7 @@ export default function MenuPage() {
                   src={getImageUrl(item)!} 
                   alt={item.name} 
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    console.error("Failed to load image for:", item.name, "URL:", getImageUrl(item));
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">
@@ -214,7 +205,7 @@ export default function MenuPage() {
             <div className="p-6">
               <h3 className="font-semibold text-lg">{item.name}</h3>
               <p className="text-sm text-zinc-500 mt-1">{item.category}</p>
-              <p className="text-2xl font-bold mt-3">${item.price.toFixed(2)}</p>
+              <p className="text-2xl font-bold mt-3">₱{item.price.toFixed(2)}</p>
 
               {item.availableFrom && (
                 <p className="text-xs text-zinc-500 mt-2">
@@ -270,21 +261,36 @@ export default function MenuPage() {
                   required 
                 />
 
-                <Input 
-                  placeholder="Category" 
-                  value={formData.category} 
-                  onChange={e => setFormData({...formData, category: e.target.value})} 
-                  required 
-                />
+                <div>
+                  <label className="block text-sm font-medium mb-2">Category</label>
+                  <select
+                    value={formData.category}
+                    onChange={e => setFormData({...formData, category: e.target.value})}
+                    className="w-full p-3 rounded-2xl border border-input bg-background"
+                    required
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
 
-                <Input 
-                  type="number" 
-                  step="0.01" 
-                  placeholder="Price" 
-                  value={formData.price} 
-                  onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} 
-                  required 
-                />
+                <div>
+                  <label className="block text-sm font-medium mb-2">Price (₱)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-3.5 text-zinc-500 font-medium">₱</span>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      value={formData.price} 
+                      onChange={e => setFormData({...formData, price: parseFloat(e.target.value) || 0})} 
+                      className="pl-8"
+                      required 
+                    />
+                  </div>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

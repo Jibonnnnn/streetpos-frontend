@@ -6,6 +6,7 @@ import MenuPage from "@/pages/Menu";
 import UsersPage from "@/pages/Users";
 import ManagerPage from "@/pages/Manager";
 import CashierPage from "@/pages/Cashier";
+import {Toaster} from "sonner";
 
 function ProtectedRoute({ 
   children, 
@@ -29,6 +30,8 @@ function ProtectedRoute({
 function App() {
   return (
     <BrowserRouter>
+
+    <Toaster position="top-center" richColors closeButton />
       <Routes>
         <Route path="/login" element={<LoginForm />} />
         

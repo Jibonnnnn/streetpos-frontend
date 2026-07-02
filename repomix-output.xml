@@ -53,6 +53,7 @@ src/App.tsx
 src/assets/hero.png
 src/assets/react.svg
 src/assets/vite.svg
+src/components/layout.tsx
 src/components/login-form.tsx
 src/components/ui/button.tsx
 src/components/ui/card.tsx
@@ -61,8 +62,15 @@ src/components/ui/input.tsx
 src/components/ui/label.tsx
 src/components/ui/separator.tsx
 src/index.css
+src/lib/api.ts
 src/lib/utils.ts
 src/main.tsx
+src/pages/Cashier.tsx
+src/pages/Dashboard.tsx
+src/pages/Manager.tsx
+src/pages/Menu.tsx
+src/pages/Users.tsx
+src/types/index.ts
 tsconfig.app.json
 tsconfig.json
 tsconfig.node.json
@@ -71,6 +79,213 @@ vite.config.ts
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="src/pages/Cashier.tsx">
+import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import type { MenuItem } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Trash2, CreditCard } from 'lucide-react';
+
+export default function CashierPage() {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [total, setTotal] = useState(0);
+
+  // Load menu on mount
+  useEffect(() => {
+    api.get('/menu').then(res => setMenuItems(res.data));
+  }, []);
+
+  const addToCart = (item: MenuItem) => {
+    setCart(prev => [...prev, { ...item, quantity: 1 }]);
+    setTotal(prev => prev + item.price);
+  };
+
+  const removeFromCart = (index: number) => {
+    const item = cart[index];
+    setCart(prev => prev.filter((_, i) => i !== index));
+    setTotal(prev => prev - item.price * item.quantity);
+  };
+
+  const checkout = () => {
+    alert(`Checkout successful! Total: $${total.toFixed(2)}\n(Real payment integration would go here)`);
+    setCart([]);
+    setTotal(0);
+  };
+
+  const filteredMenu = menuItems.filter(item =>
+    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[calc(100vh-120px)]">
+      {/* Menu Section */}
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 overflow-auto">
+        <div className="flex justify-between mb-6">
+          <h1 className="text-3xl font-bold">POS Terminal</h1>
+          <Input 
+            placeholder="Search menu..." 
+            className="max-w-xs"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {filteredMenu.map(item => (
+            <div 
+              key={item.id}
+              className="border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 cursor-pointer hover:border-amber-500 transition-colors"
+              onClick={() => addToCart(item)}
+            >
+              {item.imageUrl && <img src={item.imageUrl} className="w-full h-32 object-cover rounded-xl mb-3" />}
+              <h3 className="font-semibold">{item.name}</h3>
+              <p className="text-2xl font-bold text-amber-600">${item.price}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Cart / Checkout */}
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col">
+        <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
+        
+        <div className="flex-1 overflow-auto space-y-4">
+          {cart.length === 0 ? (
+            <p className="text-zinc-500 text-center py-12">Cart is empty. Add items from the left.</p>
+          ) : (
+            cart.map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
+                <div>
+                  <p>{item.name}</p>
+                  <p className="text-sm text-zinc-500">x{item.quantity}</p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
+                  <Button variant="ghost" size="sm" onClick={() => removeFromCart(idx)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="border-t pt-6 mt-auto">
+          <div className="flex justify-between text-3xl font-bold mb-6">
+            <span>Total</span>
+            <span>${total.toFixed(2)}</span>
+          </div>
+          
+          <Button onClick={checkout} className="w-full py-8 text-lg" disabled={cart.length === 0}>
+            <CreditCard className="mr-3" /> Complete Payment
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/Manager.tsx">
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { TrendingUp, Users, Coffee, AlertTriangle } from 'lucide-react';
+
+export default function ManagerPage() {
+  const [stats] = useState({
+    todaySales: 1284,
+    orders: 47,
+    lowStock: 3,
+    topItem: "Iced Latte"
+  });
+
+  useEffect(() => {
+    // In real app, fetch from /reports or dedicated endpoints
+    console.log("Manager dashboard data loaded");
+  }, []);
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight">Manager Dashboard</h1>
+          <p className="text-zinc-600 dark:text-zinc-400">Daily operations overview</p>
+        </div>
+        <Button>Generate Full Report</Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <TrendingUp className="w-10 h-10 text-emerald-600" />
+              <span className="text-emerald-600 text-sm font-medium">+18% from yesterday</span>
+            </div>
+            <p className="text-5xl font-semibold mt-6">${stats.todaySales}</p>
+            <p className="text-sm text-zinc-500 mt-1">Today's Sales</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <Coffee className="w-10 h-10 text-amber-600" />
+            </div>
+            <p className="text-5xl font-semibold mt-6">{stats.orders}</p>
+            <p className="text-sm text-zinc-500 mt-1">Orders Today</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <AlertTriangle className="w-10 h-10 text-orange-600" />
+            </div>
+            <p className="text-5xl font-semibold mt-6 text-orange-600">{stats.lowStock}</p>
+            <p className="text-sm text-zinc-500 mt-1">Low Stock Items</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <Users className="w-10 h-10 text-violet-600" />
+            </div>
+            <p className="text-5xl font-semibold mt-6">12</p>
+            <p className="text-sm text-zinc-500 mt-1">Active Staff</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardContent className="p-8">
+            <h3 className="font-semibold mb-4">Top Selling Items</h3>
+            <p className="text-2xl">{stats.topItem}</p>
+            <p className="text-sm text-zinc-500">42 sold today</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-8">
+            <h3 className="font-semibold mb-4">Quick Actions</h3>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" onClick={() => window.location.href = '/menu'}>Manage Menu</Button>
+              <Button variant="outline">View Inventory</Button>
+              <Button variant="outline">Staff Schedule</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+</file>
 
 <file path=".gitignore">
 # Logs
@@ -173,9 +388,10 @@ dist-ssr
     "@fontsource-variable/public-sans": "^5.2.7",
     "@tailwindcss/vite": "^4.3.2",
     "autoprefixer": "^10.5.2",
+    "axios": "^1.18.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.22.0",
+    "lucide-react": "^1.23.0",
     "postcss": "^8.5.16",
     "radix-ui": "^1.6.0",
     "react": "^19.2.7",
@@ -452,19 +668,83 @@ See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rule
 </file>
 
 <file path="src/App.tsx">
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LoginForm } from "@/components/login-form";
+import Layout from "@/components/layout";
+import Dashboard from "@/pages/Dashboard";
+import MenuPage from "@/pages/Menu";
+import UsersPage from "@/pages/Users";
+import ManagerPage from "@/pages/Manager";
+import CashierPage from "@/pages/Cashier";
 
+function ProtectedRoute({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: React.ReactNode; 
+  allowedRoles?: string[]; 
+}) {
+  const token = localStorage.getItem('token');
+  const userRole = localStorage.getItem('userRole');
 
-import "./App.css";
+  if (!token) return <Navigate to="/login" replace />;
+
+  if (allowedRoles && !allowedRoles.includes(userRole || '')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginForm />} />
+        
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          
+          {/* Manager Routes */}
+          <Route 
+            path="/manager" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                <ManagerPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Cashier Routes */}
+          <Route 
+            path="/cashier" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Cashier']}>
+                <CashierPage />
+              </ProtectedRoute>
+            } 
+          />
 
-        <Route path="/" element={<Navigate to="/login" replace />} />
+          {/* Existing Admin/Manager Pages */}
+          <Route 
+            path="/menu" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                <MenuPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/users" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <UsersPage />
+              </ProtectedRoute>
+            } 
+          />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   );
@@ -481,104 +761,225 @@ export default App;
 <svg xmlns="http://www.w3.org/2000/svg" width="77" height="47" fill="none" aria-labelledby="vite-logo-title" viewBox="0 0 77 47"><title id="vite-logo-title">Vite</title><style>.parenthesis{fill:#000}@media (prefers-color-scheme:dark){.parenthesis{fill:#fff}}</style><path fill="#9135ff" d="M40.151 45.71c-.663.844-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.493c-.92 0-1.457-1.04-.92-1.788l7.479-10.471c1.07-1.498 0-3.578-1.842-3.578H15.443c-.92 0-1.456-1.04-.92-1.788l9.696-13.576c.213-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.472c-1.07 1.497 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.087.89 1.83L40.153 45.712z"/><mask id="a" width="48" height="47" x="14" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M40.047 45.71c-.663.843-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.389c-.92 0-1.457-1.04-.92-1.788l7.479-10.472c1.07-1.497 0-3.578-1.842-3.578H15.34c-.92 0-1.456-1.04-.92-1.788l9.696-13.575c.213-.297.556-.474.92-.474H53.93c.92 0 1.456 1.04.92 1.788L47.37 13.03c-1.07 1.498 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.088.89 1.831L40.049 45.712z"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#eee6ff" rx="5.508" ry="14.704" transform="rotate(269.814 20.96 11.29)scale(-1 1)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#eee6ff" rx="10.399" ry="29.851" transform="rotate(89.814 -16.902 -8.275)scale(1 -1)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#8900ff" rx="5.508" ry="30.487" transform="rotate(89.814 -19.197 -7.127)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.928 4.177)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.738 5.52)scale(1 -1)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#eee6ff" rx="14.072" ry="22.078" transform="rotate(93.35 31.245 55.578)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx="14.592" cy="9.743" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(39.51 14.592 9.743)"/></g><g filter="url(#k)"><ellipse cx="61.728" cy="-5.321" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 61.728 -5.32)"/></g><g filter="url(#l)"><ellipse cx="55.618" cy="7.104" fill="#00c2ff" rx="5.971" ry="9.665" transform="rotate(37.892 55.618 7.104)"/></g><g filter="url(#m)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#n)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#o)"><ellipse cx="49.857" cy="30.678" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 49.857 30.678)"/></g><g filter="url(#p)"><ellipse cx="52.623" cy="33.171" fill="#00c2ff" rx="5.971" ry="15.297" transform="rotate(37.892 52.623 33.17)"/></g></g><path d="M6.919 0c-9.198 13.166-9.252 33.575 0 46.789h6.215c-9.25-13.214-9.196-33.623 0-46.789zm62.424 0h-6.215c9.198 13.166 9.252 33.575 0 46.789h6.215c9.25-13.214 9.196-33.623 0-46.789" class="parenthesis"/><defs><filter id="b" width="60.045" height="41.654" x="-5.564" y="16.92" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-40.407" y="-6.762" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-35.435" y="2.801" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-30.84" y="20.8" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-29.307" y="21.949" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="29.961" y="-17.13" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-13.43" y="-22.082" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="34.321" y="-37.644" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="38.847" y="-10.552" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="22.45" y="-1.645" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="32.919" y="11.36" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter></defs></svg>
 </file>
 
-<file path="src/components/login-form.tsx">
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+<file path="src/components/layout.tsx">
+import { useEffect, useState } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  Coffee, 
+  Users, 
+  BarChart3, 
+  UserCog, 
+  LogOut 
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  roles: string[];
+}
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['Admin', 'Manager', 'Cashier'] },
+  { label: 'POS Terminal', href: '/cashier', icon: Coffee, roles: ['Admin', 'Manager', 'Cashier'] },
+  { label: 'Menu Management', href: '/menu', icon: Coffee, roles: ['Admin', 'Manager'] },
+  { label: 'Manager Hub', href: '/manager', icon: BarChart3, roles: ['Admin', 'Manager'] },
+  { label: 'Staff Management', href: '/users', icon: Users, roles: ['Admin'] },
+];
+
+export default function Layout() {
+  const [userRole, setUserRole] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const role = localStorage.getItem('userRole') || '';
+    const name = localStorage.getItem('fullName') || 'User';
+    setUserRole(role);
+    setUserName(name);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.clear();
+    navigate('/login');
+  };
+
+  const filteredNavItems = navItems.filter(item => 
+    item.roles.includes(userRole)
+  );
+
   return (
-    <div className={cn("min-h-screen flex items-center justify-center bg-zinc-50 p-4", className)} {...props}>
-      <Card className="overflow-hidden p-0 w-full max-w-[900px] shadow-sm">
-        <CardContent className="grid p-0 md:grid-cols-2">
-          <form className="p-8 md:p-12">
-            <FieldGroup>
-              <div className="flex flex-col items-center gap-2 text-center">
-                <h1 className="text-2xl font-bold">Welcome back</h1>
-                <p className="text-balance text-muted-foreground">
-                  Login to your Streetside POS account
-                </p>
-              </div>
-
-              <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="admin@streetpos.com"
-                  required
-                />
-              </Field>
-
-              <Field>
-                <div className="flex items-center">
-                  <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <a
-                    href="#"
-                    className="ml-auto text-sm underline-offset-2 hover:underline"
-                  >
-                    Forgot your password?
-                  </a>
-                </div>
-                <Input id="password" type="password" required />
-              </Field>
-
-              <Field>
-                <Button 
-                  type="submit" 
-                  className="bg-black hover:bg-black/90 text-white w-full"
-                >
-                  Login
-                </Button>
-              </Field>
-
-              
-
-              
-            </FieldGroup>
-          </form>
-
-          {/* Right panel with logo + disclaimer below it (as in the latest image) */}
-          <div className="relative hidden bg-zinc-100 md:block">
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-8 p-8">
-              {/* Purple lightning bolt logo */}
-              <div className="w-24 h-24 rounded-full bg-white shadow flex items-center justify-center">
-                <svg 
-                  width="64" 
-                  height="64" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path 
-                    d="M13 2L3 14H11L10 22L21 10H13L14 2Z" 
-                    fill="#7C3AED" 
-                  />
-                </svg>
-              </div>
-
-              {/* Disclaimer positioned below the logo on the right side */}
-              <FieldDescription className="text-center md:text-right max-w-[260px] text-sm text-muted-foreground">
-                By clicking continue, you agree to our{" "}
-                <a href="#" className="underline hover:text-foreground">Terms of Service</a> and{" "}
-                <a href="#" className="underline hover:text-foreground">Privacy Policy</a>.
-              </FieldDescription>
+    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">
+      {/* Sidebar */}
+      <div className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col">
+        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-violet-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl">
+              ☕
+            </div>
+            <div>
+              <h1 className="font-semibold text-2xl tracking-tight">StreetPOS</h1>
+              <p className="text-xs text-zinc-500">Café Management</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        <div className="flex-1 p-6">
+          <nav className="space-y-2">
+            {filteredNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.href;
+              
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all",
+                    isActive 
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" 
+                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* User Footer */}
+        <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 mt-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-lg">
+              <UserCog className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{userName}</p>
+              <p className="text-xs text-zinc-500 capitalize">{userRole}</p>
+            </div>
+          </div>
+
+          <Button 
+            variant="outline" 
+            className="w-full justify-start gap-2"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto">
+        <main className="p-10">
+          <Outlet />
+        </main>
+      </div>
     </div>
-  )
+  );
+}
+</file>
+
+<file path="src/components/login-form.tsx">
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
+export function LoginForm() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { token, fullName, role } = response.data;
+
+      localStorage.setItem('token', token);
+      localStorage.setItem('fullName', fullName);
+      localStorage.setItem('userRole', role);
+
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Invalid credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 dark:from-zinc-950 dark:to-zinc-900 p-4">
+      <div className="w-full max-w-[960px] grid md:grid-cols-2 bg-white dark:bg-zinc-900 rounded-3xl shadow-xl overflow-hidden">
+        {/* Form Side */}
+        <div className="p-10 md:p-16 flex flex-col justify-center">
+          <div className="flex items-center gap-3 mb-10">
+            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center text-white text-4xl">☕</div>
+            <div>
+              <h1 className="text-4xl font-bold tracking-tighter">StreetPOS</h1>
+              <p className="text-sm text-amber-600">Café Operations</p>
+            </div>
+          </div>
+
+          <h2 className="text-3xl font-semibold mb-2">Welcome back</h2>
+          <p className="text-zinc-600 dark:text-zinc-400 mb-8">Sign in to manage your café</p>
+
+          {error && <div className="mb-6 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 p-4 rounded-2xl text-sm">{error}</div>}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="text-sm font-medium block mb-2">Email Address</label>
+              <Input 
+                type="email" 
+                placeholder="admin@streetpos.com" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)}
+                required 
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-2">Password</label>
+              <Input 
+                type="password" 
+                placeholder="••••••••" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)}
+                required 
+              />
+            </div>
+
+            <Button type="submit" className="w-full h-12 text-base" disabled={loading}>
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </form>
+        </div>
+
+        {/* Visual Side */}
+        <div className="hidden md:flex bg-gradient-to-br from-amber-600 via-orange-600 to-red-600 items-center justify-center relative overflow-hidden">
+          <div className="text-white text-center z-10">
+            <div className="text-7xl mb-6">☕</div>
+            <h3 className="text-4xl font-bold tracking-tight mb-3">Run your café</h3>
+            <p className="max-w-xs mx-auto opacity-90">Efficiently. Beautifully. Profitably.</p>
+          </div>
+          <div className="absolute inset-0 bg-[radial-gradient(#ffffff33_1px,transparent_1px)] [background-size:20px_20px]"></div>
+        </div>
+      </div>
+    </div>
+  );
 }
 </file>
 
@@ -1209,6 +1610,36 @@ export { Separator }
 }
 </file>
 
+<file path="src/lib/api.ts">
+import axios from 'axios';
+
+const API_BASE = 'http://localhost:5032/api';
+
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.clear();
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+</file>
+
 <file path="src/lib/utils.ts">
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
@@ -1229,6 +1660,534 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+</file>
+
+<file path="src/pages/Dashboard.tsx">
+import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import { Coffee, Users, TrendingUp, Clock } from 'lucide-react';
+
+interface Stat {
+  title: string;
+  value: number | string;
+  icon: React.ElementType;
+  change?: string;
+}
+
+export default function Dashboard() {
+  const [stats, setStats] = useState<Stat[]>([
+    { title: "Menu Items", value: 0, icon: Coffee },
+    { title: "Staff", value: 0, icon: Users },
+    { title: "Today's Sales", value: "$1,284", icon: TrendingUp, change: "+12%" },
+    { title: "Open Orders", value: 7, icon: Clock },
+  ]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [menuRes, usersRes] = await Promise.all([
+          api.get('/menu'),
+          api.get('/users')
+        ]);
+        setStats(prev => prev.map((s, i) => {
+          if (i === 0) return { ...s, value: menuRes.data.length };
+          if (i === 1) return { ...s, value: usersRes.data.length };
+          return s;
+        }));
+      } catch (e) { console.error(e); }
+    };
+    fetchData();
+  }, []);
+
+  return (
+    <div>
+      <div className="flex justify-between items-end mb-10">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight">Good afternoon, Team</h1>
+          <p className="text-zinc-600 dark:text-zinc-400 mt-1">Here's what's happening at StreetPOS today</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, i) => (
+          <div key={i} className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <stat.icon className="w-9 h-9 text-amber-600" />
+              {stat.change && <span className="text-emerald-600 text-sm font-medium">{stat.change}</span>}
+            </div>
+            <p className="text-5xl font-semibold mt-8 mb-1">{stat.value}</p>
+            <p className="text-sm text-zinc-500">{stat.title}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Recent Activity */}
+      <div className="mt-12">
+        <h2 className="text-xl font-semibold mb-6">Recent Activity</h2>
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
+          <p className="text-zinc-500 italic">Mock recent transactions would appear here in a full implementation.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/Menu.tsx">
+import { useState, useEffect } from 'react';
+import api from '@/lib/api';
+import type { MenuItem } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Plus, Edit, Trash2, Search, Upload, Image as ImageIcon } from 'lucide-react';
+
+export default function MenuPage() {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  const [showModal, setShowModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    category: '',
+    price: 0,
+    availableFrom: '',
+    availableUntil: '',
+    modifiers: [] as string[],
+  });
+
+  const categories = ['All', 'Coffee', 'Tea', 'Pastry', 'Breakfast', 'Sandwich', 'Dessert', 'Other'];
+
+  useEffect(() => {
+    fetchMenu();
+  }, []);
+
+  useEffect(() => {
+    let result = [...menuItems];
+    if (searchTerm) {
+      result = result.filter(item => 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    if (selectedCategory !== 'All') {
+      result = result.filter(item => item.category === selectedCategory);
+    }
+    setFilteredItems(result);
+  }, [menuItems, searchTerm, selectedCategory]);
+
+  const fetchMenu = async () => {
+    try {
+      const res = await api.get('/menu');
+      setMenuItems(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openModal = (item?: MenuItem) => {
+    if (item) {
+      setEditingItem(item);
+      setFormData({
+        name: item.name,
+        description: item.description || '',
+        category: item.category,
+        price: item.price,
+        availableFrom: item.availableFrom ? item.availableFrom.slice(0, 5) : '',
+        availableUntil: item.availableUntil ? item.availableUntil.slice(0, 5) : '',
+        modifiers: item.modifiers || [],
+      });
+      setImagePreview(item.imageUrl || null);
+    } else {
+      setEditingItem(null);
+      setFormData({ 
+        name: '', 
+        description: '', 
+        category: '', 
+        price: 0, 
+        availableFrom: '', 
+        availableUntil: '', 
+        modifiers: [] 
+      });
+      setImagePreview(null);
+    }
+    setSelectedFile(null);
+    setShowModal(true);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const form = new FormData();
+      form.append('name', formData.name);
+      form.append('description', formData.description || '');
+      form.append('category', formData.category);
+      form.append('price', formData.price.toString());
+      
+      if (formData.availableFrom) form.append('availableFrom', formData.availableFrom);
+      if (formData.availableUntil) form.append('availableUntil', formData.availableUntil);
+
+      if (selectedFile) {
+        form.append('imageFile', selectedFile);
+      }
+
+      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
+
+      if (editingItem) {
+        await api.put(`/menu/${editingItem.id}`, form, config);
+      } else {
+        await api.post('/menu', form, config);
+      }
+
+      fetchMenu();
+      setShowModal(false);
+      setImagePreview(null);
+      setSelectedFile(null);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to save item');
+    }
+  };
+
+  const handleDeactivate = async (id: number) => {
+    if (!confirm('Deactivate this item?')) return;
+    try {
+      await api.delete(`/menu/${id}`);
+      fetchMenu();
+    } catch (err) {
+      alert('Failed to deactivate');
+    }
+  };
+
+  // Get full image URL (handles both old and new backend)
+  const getImageUrl = (item: MenuItem): string | null => {
+    if (!item.imageUrl) return null;
+    
+    if (item.imageUrl.startsWith('/api/menu')) {
+      return `http://localhost:5032${item.imageUrl}`;
+    }
+    if (item.imageUrl.startsWith('http')) {
+      return item.imageUrl;
+    }
+    return `http://localhost:5032${item.imageUrl.startsWith('/') ? '' : '/'}${item.imageUrl}`;
+  };
+
+  if (loading) return <div className="p-8 text-center">Loading menu items...</div>;
+
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-4xl font-bold tracking-tight">Menu Management</h1>
+        <Button onClick={() => openModal()}>
+          <Plus className="w-4 h-4 mr-2" /> Add New Item
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-3.5 w-5 h-5 text-zinc-400" />
+          <Input 
+            placeholder="Search menu items..." 
+            className="pl-11"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <select 
+          value={selectedCategory} 
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-4 py-3 rounded-2xl border border-input bg-background text-sm"
+        >
+          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+        </select>
+      </div>
+
+      {/* Menu Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredItems.map(item => (
+          <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-sm border border-zinc-100 dark:border-zinc-800">
+            <div className="h-48 bg-zinc-100 dark:bg-zinc-800 relative">
+              {item.imageUrl ? (
+                <img 
+                  src={getImageUrl(item)!} 
+                  alt={item.name} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    console.error("Failed to load image for:", item.name, "URL:", getImageUrl(item));
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">
+                  <ImageIcon className="w-20 h-20 text-zinc-400" />
+                </div>
+              )}
+
+              <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                {item.isActive ? 'Active' : 'Inactive'}
+              </div>
+            </div>
+
+            <div className="p-6">
+              <h3 className="font-semibold text-lg">{item.name}</h3>
+              <p className="text-sm text-zinc-500 mt-1">{item.category}</p>
+              <p className="text-2xl font-bold mt-3">${item.price.toFixed(2)}</p>
+
+              {item.availableFrom && (
+                <p className="text-xs text-zinc-500 mt-2">
+                  {item.availableFrom} - {item.availableUntil}
+                </p>
+              )}
+
+              <div className="flex gap-2 mt-6">
+                <Button variant="outline" size="sm" onClick={() => openModal(item)}>
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDeactivate(item.id)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-auto">
+            <div className="p-8">
+              <h2 className="text-2xl font-semibold mb-6">
+                {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
+              </h2>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Item Image</label>
+                  <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-6 text-center">
+                    {imagePreview ? (
+                      <img src={imagePreview} alt="Preview" className="mx-auto max-h-48 rounded-xl object-cover" />
+                    ) : (
+                      <Upload className="w-12 h-12 mx-auto text-zinc-400" />
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleImageChange}
+                      className="mt-4 block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+                    />
+                  </div>
+                </div>
+
+                <Input 
+                  placeholder="Item Name" 
+                  value={formData.name} 
+                  onChange={e => setFormData({...formData, name: e.target.value})} 
+                  required 
+                />
+
+                <Input 
+                  placeholder="Category" 
+                  value={formData.category} 
+                  onChange={e => setFormData({...formData, category: e.target.value})} 
+                  required 
+                />
+
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="Price" 
+                  value={formData.price} 
+                  onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} 
+                  required 
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Available From</label>
+                    <Input 
+                      type="time" 
+                      value={formData.availableFrom} 
+                      onChange={e => setFormData({...formData, availableFrom: e.target.value})} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Available Until</label>
+                    <Input 
+                      type="time" 
+                      value={formData.availableUntil} 
+                      onChange={e => setFormData({...formData, availableUntil: e.target.value})} 
+                    />
+                  </div>
+                </div>
+
+                <Input 
+                  placeholder="Description (optional)" 
+                  value={formData.description} 
+                  onChange={e => setFormData({...formData, description: e.target.value})} 
+                />
+
+                <div className="flex gap-3 pt-4">
+                  <Button type="submit" className="flex-1">
+                    {editingItem ? 'Update Item' : 'Create Item'}
+                  </Button>
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/Users.tsx">
+import { useState, useEffect } from 'react';
+import api from '@/lib/api';
+import type { User } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Plus, Edit } from 'lucide-react';
+
+export default function UsersPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/users');
+      setUsers(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="p-8">Loading users...</div>;
+
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Staff Management</h1>
+        <Button>
+          <Plus className="w-4 h-4 mr-2" /> Add New Staff
+        </Button>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b bg-zinc-50">
+              <th className="text-left p-4">Full Name</th>
+              <th className="text-left p-4">Email</th>
+              <th className="text-left p-4">Role</th>
+              <th className="text-left p-4">Employee ID</th>
+              <th className="text-left p-4">Status</th>
+              <th className="text-right p-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id} className="border-b hover:bg-zinc-50">
+                <td className="p-4 font-medium">{user.fullName}</td>
+                <td className="p-4 text-zinc-600">{user.email}</td>
+                <td className="p-4">
+                  <span className="px-3 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
+                    {user.role}
+                  </span>
+                </td>
+                <td className="p-4 text-zinc-600">{user.employeeId || '-'}</td>
+                <td className="p-4">
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                    user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {user.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className="p-4 text-right">
+                  <Button variant="outline" size="sm">
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/types/index.ts">
+export interface MenuItem {
+  id: number;
+  name: string;
+  description?: string;
+  category: string;
+  price: number;
+  imageUrl? : string;
+  imageData?: string;
+  modifiers?: string[];
+  availableFrom?: string;
+  availableUntil?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface User {
+  id: number;
+  fullName: string;
+  email: string;
+  phoneNumber?: string;
+  employeeId?: string;
+  role: 'Admin' | 'Manager' | 'Cashier';
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  userId: number;
+  fullName: string;
+  token: string;
+  role: string;
+  expiresAt: string;
+}
 </file>
 
 <file path="tsconfig.app.json">

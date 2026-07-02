@@ -4,6 +4,7 @@ import type { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -16,6 +17,12 @@ export default function UsersPage() {
     email: '',
     phoneNumber: '',
     role: 'Cashier' as 'Admin' | 'Manager' | 'Cashier',
+    password: '',
+  });
+
+  const [errors, setErrors] = useState({
+    fullName: '',
+    email: '',
     password: '',
   });
 
@@ -34,7 +41,31 @@ export default function UsersPage() {
     }
   };
 
+  const validateField = (field: string, value: string) => {
+    const newErrors = { ...errors };
+
+    if (field === 'fullName') {
+      newErrors.fullName = value.trim() ? '' : 'Full name is required';
+    }
+
+    if (field === 'email') {
+      if (!value.trim()) newErrors.email = 'Email is required';
+      else if (!/\S+@\S+\.\S+/.test(value)) newErrors.email = 'Please enter a valid email';
+      else newErrors.email = '';
+    }
+
+    if (field === 'password' && !editingUser) {
+      if (!value) newErrors.password = 'Password is required';
+      else if (value.length < 8) newErrors.password = 'Password must be at least 8 characters';
+      else if (!/[a-z]/.test(value)) newErrors.password = 'Password must contain at least one lowercase letter';
+      else newErrors.password = '';
+    }
+
+    setErrors(newErrors);
+  };
+
   const openModal = (user?: User) => {
+    setErrors({ fullName: '', email: '', password: '' });
     if (user) {
       setEditingUser(user);
       setFormData({
@@ -59,32 +90,37 @@ export default function UsersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.fullName.trim() || !formData.email.trim()) return;
+    if (!editingUser && (!formData.password || formData.password.length < 8)) return;
+
     try {
       if (!editingUser) {
-        // Create new user
         await api.post('/users', {
           fullName: formData.fullName,
           email: formData.email,
           phoneNumber: formData.phoneNumber || null,
           password: formData.password,
-          role: formData.role,
+          role: formData.role
         });
-        alert('✅ New staff account created successfully!');
+        toast.success('New staff account created successfully!');
       } else {
-        // Update existing user
         await api.put(`/users/${editingUser.id}`, {
           fullName: formData.fullName,
           phoneNumber: formData.phoneNumber || null,
           role: formData.role,
-          isActive: true,
+          isActive: true
         });
-        alert('✅ Staff information updated successfully!');
+        toast.success('Staff information updated successfully!');
       }
 
       setShowModal(false);
       fetchUsers();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save staff');
+      const msg = err.response?.data?.message || 
+                  err.response?.data?.error || 
+                  "Failed to save staff. Please check your input.";
+      toast.error(msg);
     }
   };
 
@@ -93,17 +129,19 @@ export default function UsersPage() {
 
     try {
       await api.put(`/users/${id}/deactivate`);
-      alert('✅ Staff member has been deactivated.');
+      toast.success('Staff member has been deactivated.');
       fetchUsers();
     } catch (err: any) {
-      alert('Failed to deactivate staff member.');
+      toast.error('Failed to deactivate staff member.');
     }
   };
 
   if (loading) return <div className="p-8">Loading staff...</div>;
 
   return (
-    <div className="p-8">
+    <div className="p-8 relative">
+      <Toaster position="top-center" richColors closeButton />
+
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-4xl font-bold tracking-tight">Staff Management</h1>
         <Button onClick={() => openModal()}>
@@ -111,6 +149,7 @@ export default function UsersPage() {
         </Button>
       </div>
 
+      {/* Table */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-sm overflow-hidden">
         <table className="w-full">
           <thead>
@@ -166,7 +205,7 @@ export default function UsersPage() {
         </table>
       </div>
 
-      {/* Add/Edit Staff Modal */}
+      {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
@@ -176,21 +215,35 @@ export default function UsersPage() {
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-5">
-                <Input
-                  placeholder="Full Name"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  required
-                />
+                <div>
+                  <Input
+                    placeholder="Full Name"
+                    value={formData.fullName}
+                    onChange={(e) => {
+                      setFormData({ ...formData, fullName: e.target.value });
+                      validateField('fullName', e.target.value);
+                    }}
+                    className={errors.fullName ? "border-red-500" : ""}
+                    required
+                  />
+                  {errors.fullName && <p className="text-red-500 text-sm mt-1">{errors.fullName}</p>}
+                </div>
 
-                <Input
-                  type="email"
-                  placeholder="Email Address"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                  disabled={!!editingUser}
-                />
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Email Address"
+                    value={formData.email}
+                    onChange={(e) => {
+                      setFormData({ ...formData, email: e.target.value });
+                      validateField('email', e.target.value);
+                    }}
+                    className={errors.email ? "border-red-500" : ""}
+                    required
+                    disabled={!!editingUser}
+                  />
+                  {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                </div>
 
                 <Input
                   placeholder="Phone Number (optional)"
@@ -212,13 +265,20 @@ export default function UsersPage() {
                 </div>
 
                 {!editingUser && (
-                  <Input
-                    type="password"
-                    placeholder="Password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
+                  <div>
+                    <Input
+                      type="password"
+                      placeholder="Password (min 8 chars, 1 lowercase)"
+                      value={formData.password}
+                      onChange={(e) => {
+                        setFormData({ ...formData, password: e.target.value });
+                        validateField('password', e.target.value);
+                      }}
+                      className={errors.password ? "border-red-500" : ""}
+                      required
+                    />
+                    {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+                  </div>
                 )}
 
                 <div className="flex gap-3 pt-4">
