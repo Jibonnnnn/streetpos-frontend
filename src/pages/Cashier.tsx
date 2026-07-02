@@ -3,7 +3,7 @@ import api from '@/lib/api';
 import type { MenuItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Trash2, CreditCard, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Trash2, CreditCard, AlertCircle, Loader2, RefreshCw, X } from 'lucide-react';
 
 export default function CashierPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -13,20 +13,19 @@ export default function CashierPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Modal for modifiers
+  const [showModifiersModal, setShowModifiersModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
+  const [customNote, setCustomNote] = useState('');
+
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      setError(null);
       const res = await api.get('/menu');
-      console.log("✅ Menu data received:", res.data);
       setMenuItems(res.data || []);
     } catch (err: any) {
-      console.error("❌ API Error:", err);
-      setError(
-        err.response?.status 
-          ? `Server error (${err.response.status})` 
-          : "Cannot connect to backend. Is the server running?"
-      );
+      setError("Cannot connect to backend.");
     } finally {
       setLoading(false);
     }
@@ -36,9 +35,26 @@ export default function CashierPage() {
     fetchMenu();
   }, []);
 
-  const addToCart = (item: MenuItem) => {
-    setCart(prev => [...prev, { ...item, quantity: 1 }]);
-    setTotal(prev => prev + item.price);
+  const openModifiersModal = (item: MenuItem) => {
+    setSelectedItem(item);
+    setSelectedModifiers([]);
+    setCustomNote('');
+    setShowModifiersModal(true);
+  };
+
+  const addToCartWithModifiers = () => {
+    if (!selectedItem) return;
+
+    const cartItem = {
+      ...selectedItem,
+      quantity: 1,
+      modifiers: [...selectedModifiers],
+      note: customNote.trim()
+    };
+
+    setCart(prev => [...prev, cartItem]);
+    setTotal(prev => prev + selectedItem.price);
+    setShowModifiersModal(false);
   };
 
   const removeFromCart = (index: number) => {
@@ -49,7 +65,7 @@ export default function CashierPage() {
 
   const checkout = () => {
     if (cart.length === 0) return;
-    alert(`✅ Checkout successful!\nTotal: ₱${total.toFixed(2)}\n\n(Real payment integration goes here)`);
+    alert(`✅ Order placed successfully!\nTotal: ₱${total.toFixed(2)}`);
     setCart([]);
     setTotal(0);
   };
@@ -65,34 +81,13 @@ export default function CashierPage() {
     return `http://localhost:5032${item.imageUrl.startsWith('/') ? '' : '/'}${item.imageUrl}`;
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh]">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-600 mb-4" />
-        <p className="text-zinc-500">Loading menu items...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh] text-center px-6">
-        <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-        <p className="text-red-600 font-medium mb-2">Failed to load menu</p>
-        <p className="text-zinc-500 mb-6 max-w-md">{error}</p>
-        <Button onClick={fetchMenu} className="gap-2">
-          <RefreshCw className="w-4 h-4" />
-          Retry
-        </Button>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center h-[70vh]"><Loader2 className="w-10 h-10 animate-spin" /></div>;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[calc(100vh-120px)]">
       {/* Menu Section */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 overflow-auto">
-        <div className="flex justify-between items-center mb-6 sticky top-0 bg-white dark:bg-zinc-900 z-10 pb-4">
+        <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">POS Terminal</h1>
           <Input 
             placeholder="Search menu..." 
@@ -102,93 +97,128 @@ export default function CashierPage() {
           />
         </div>
 
-        {filteredMenu.length === 0 ? (
-          <div className="text-center py-20 text-zinc-500">
-            No menu items found.
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            {filteredMenu.map(item => (
-              <div 
-                key={item.id}
-                className="border border-zinc-200 dark:border-zinc-700 rounded-3xl p-4 cursor-pointer hover:border-amber-600 hover:shadow-xl transition-all active:scale-[0.985]"
-                onClick={() => addToCart(item)}
-              >
-                <div className="h-40 bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-4 overflow-hidden relative">
-                  {getImageUrl(item) ? (
-                    <img 
-                      src={getImageUrl(item)!} 
-                      alt={item.name} 
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">☕</div>
-                  )}
-                  
-                  <div className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1 rounded-full font-medium">
-                    ₱{item.price.toFixed(2)}
-                  </div>
-                </div>
-                
-                <h3 className="font-semibold text-lg leading-tight">{item.name}</h3>
-                <p className="text-sm text-zinc-500 mt-1">{item.category}</p>
+        <div className="grid grid-cols-2 gap-4">
+          {filteredMenu.map(item => (
+            <div 
+              key={item.id}
+              className="border border-zinc-200 dark:border-zinc-700 rounded-3xl p-4 cursor-pointer hover:border-amber-600 hover:shadow-xl transition-all"
+              onClick={() => openModifiersModal(item)}
+            >
+              <div className="h-40 bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-4 overflow-hidden relative">
+                {getImageUrl(item) ? (
+                  <img src={getImageUrl(item)!} alt={item.name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">☕</div>
+                )}
+                <div className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-3 py-1 rounded-full">₱{item.price.toFixed(2)}</div>
               </div>
-            ))}
-          </div>
-        )}
+              <h3 className="font-semibold">{item.name}</h3>
+              <p className="text-sm text-zinc-500">{item.category}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Cart / Checkout */}
+      {/* Cart */}
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col">
         <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
         
-        <div className="flex-1 overflow-auto space-y-4 pr-2">
+        <div className="flex-1 overflow-auto space-y-4">
           {cart.length === 0 ? (
-            <div className="text-center py-20 text-zinc-500">
-              Your cart is empty.<br />Tap items on the left to add.
-            </div>
+            <div className="text-center py-20 text-zinc-500">Tap items to add to order</div>
           ) : (
             cart.map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
-                <div className="flex-1">
-                  <p className="font-medium">{item.name}</p>
-                  <p className="text-sm text-zinc-500">Qty: {item.quantity}</p>
+              <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
+                <div className="flex justify-between">
+                  <div>
+                    <p className="font-medium">{item.name}</p>
+                    {item.modifiers && item.modifiers.length > 0 && (
+                      <p className="text-xs text-amber-600">+ {item.modifiers.join(", ")}</p>
+                    )}
+                    {item.note && <p className="text-xs text-zinc-500">Note: {item.note}</p>}
+                  </div>
+                  <p className="font-semibold">₱{(item.price * item.quantity).toFixed(2)}</p>
                 </div>
-                <div className="flex items-center gap-4">
-                  <p className="font-semibold text-lg">₱{(item.price * item.quantity).toFixed(2)}</p>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => removeFromCart(idx)}
-                    className="text-red-500 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
+                <Button variant="ghost" size="sm" className="text-red-500 mt-2" onClick={() => removeFromCart(idx)}>
+                  Remove
+                </Button>
               </div>
             ))
           )}
         </div>
 
         <div className="border-t pt-6 mt-auto">
-          <div className="flex justify-between items-end text-4xl font-bold mb-6">
-            <span className="text-xl text-zinc-500">Total</span>
+          <div className="flex justify-between text-3xl font-bold mb-6">
+            <span>Total</span>
             <span>₱{total.toFixed(2)}</span>
           </div>
-          
-          <Button 
-            onClick={checkout} 
-            className="w-full py-8 text-lg font-semibold"
-            disabled={cart.length === 0}
-          >
-            <CreditCard className="mr-3 w-6 h-6" /> 
-            Complete Payment
+          <Button onClick={checkout} className="w-full py-8 text-lg" disabled={cart.length === 0}>
+            <CreditCard className="mr-3" /> Complete Payment
           </Button>
         </div>
       </div>
+
+      {/* Modifiers Modal */}
+      {showModifiersModal && selectedItem && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
+            <div className="p-8">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold">{selectedItem.name}</h2>
+                  <p className="text-zinc-500">₱{selectedItem.price.toFixed(2)}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowModifiersModal(false)}>
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+
+              {/* Modifiers */}
+              {selectedItem.modifiers && selectedItem.modifiers.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="font-medium mb-3">Add-ons / Modifiers</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedItem.modifiers.map((mod, i) => (
+                      <label key={i} className="flex items-center gap-2 border rounded-xl p-3 cursor-pointer hover:bg-zinc-50">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedModifiers.includes(mod)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedModifiers([...selectedModifiers, mod]);
+                            } else {
+                              setSelectedModifiers(selectedModifiers.filter(m => m !== mod));
+                            }
+                          }}
+                        />
+                        <span>{mod}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Special Requests / Notes</label>
+                <Input 
+                  placeholder="E.g. No ice, extra sugar, etc."
+                  value={customNote}
+                  onChange={(e) => setCustomNote(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-8">
+                <Button onClick={addToCartWithModifiers} className="flex-1">
+                  Add to Order
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => setShowModifiersModal(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
