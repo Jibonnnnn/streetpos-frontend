@@ -4,6 +4,8 @@ export interface MenuItem {
   description?: string;
   category: string;
   price: number;
+  imageUrl? : string;
+  imageData?: string;
   modifiers?: string[];
   availableFrom?: string;
   availableUntil?: string;

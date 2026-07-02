@@ -1,27 +1,51 @@
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import type { MenuItem } from '@/types';   // ← Must use "type" here
+import type { MenuItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Upload, Image as ImageIcon } from 'lucide-react';
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     category: '',
     price: 0,
+    availableFrom: '',
+    availableUntil: '',
     modifiers: [] as string[],
   });
+
+  const categories = ['All', 'Coffee', 'Tea', 'Pastry', 'Breakfast', 'Sandwich', 'Dessert', 'Other'];
 
   useEffect(() => {
     fetchMenu();
   }, []);
+
+  useEffect(() => {
+    let result = [...menuItems];
+    if (searchTerm) {
+      result = result.filter(item => 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    if (selectedCategory !== 'All') {
+      result = result.filter(item => item.category === selectedCategory);
+    }
+    setFilteredItems(result);
+  }, [menuItems, searchTerm, selectedCategory]);
 
   const fetchMenu = async () => {
     try {
@@ -34,35 +58,81 @@ export default function MenuPage() {
     }
   };
 
+  const openModal = (item?: MenuItem) => {
+    if (item) {
+      setEditingItem(item);
+      setFormData({
+        name: item.name,
+        description: item.description || '',
+        category: item.category,
+        price: item.price,
+        availableFrom: item.availableFrom ? item.availableFrom.slice(0, 5) : '',
+        availableUntil: item.availableUntil ? item.availableUntil.slice(0, 5) : '',
+        modifiers: item.modifiers || [],
+      });
+      setImagePreview(item.imageUrl || null);
+    } else {
+      setEditingItem(null);
+      setFormData({ 
+        name: '', 
+        description: '', 
+        category: '', 
+        price: 0, 
+        availableFrom: '', 
+        availableUntil: '', 
+        modifiers: [] 
+      });
+      setImagePreview(null);
+    }
+    setSelectedFile(null);
+    setShowModal(true);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingItem) {
-        await api.put(`/menu/${editingItem.id}`, formData);
-      } else {
-        await api.post('/menu', formData);
+      const form = new FormData();
+      form.append('name', formData.name);
+      form.append('description', formData.description || '');
+      form.append('category', formData.category);
+      form.append('price', formData.price.toString());
+      
+      if (formData.availableFrom) form.append('availableFrom', formData.availableFrom);
+      if (formData.availableUntil) form.append('availableUntil', formData.availableUntil);
+
+      if (selectedFile) {
+        form.append('imageFile', selectedFile);
       }
+
+      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
+
+      if (editingItem) {
+        await api.put(`/menu/${editingItem.id}`, form, config);
+      } else {
+        await api.post('/menu', form, config);
+      }
+
       fetchMenu();
-      resetForm();
+      setShowModal(false);
+      setImagePreview(null);
+      setSelectedFile(null);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to save item');
     }
   };
 
-  const handleEdit = (item: MenuItem) => {
-    setEditingItem(item);
-    setFormData({
-      name: item.name,
-      description: item.description || '',
-      category: item.category,
-      price: item.price,
-      modifiers: item.modifiers || [],
-    });
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm('Deactivate this menu item?')) return;
+  const handleDeactivate = async (id: number) => {
+    if (!confirm('Deactivate this item?')) return;
     try {
       await api.delete(`/menu/${id}`);
       fetchMenu();
@@ -71,79 +141,189 @@ export default function MenuPage() {
     }
   };
 
-  const resetForm = () => {
-    setFormData({ name: '', description: '', category: '', price: 0, modifiers: [] });
-    setEditingItem(null);
-    setShowForm(false);
+  // Get full image URL (handles both old and new backend)
+  const getImageUrl = (item: MenuItem): string | null => {
+    if (!item.imageUrl) return null;
+    
+    if (item.imageUrl.startsWith('/api/menu')) {
+      return `http://localhost:5032${item.imageUrl}`;
+    }
+    if (item.imageUrl.startsWith('http')) {
+      return item.imageUrl;
+    }
+    return `http://localhost:5032${item.imageUrl.startsWith('/') ? '' : '/'}${item.imageUrl}`;
   };
 
-  if (loading) return <div className="p-8">Loading menu items...</div>;
+  if (loading) return <div className="p-8 text-center">Loading menu items...</div>;
 
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Menu Management</h1>
-        <Button onClick={() => setShowForm(true)}>
+        <h1 className="text-4xl font-bold tracking-tight">Menu Management</h1>
+        <Button onClick={() => openModal()}>
           <Plus className="w-4 h-4 mr-2" /> Add New Item
         </Button>
       </div>
 
-      {/* Form */}
-      {showForm && (
-        <div className="bg-white p-6 rounded-2xl shadow mb-8">
-          <h2 className="text-xl font-semibold mb-4">
-            {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
-          </h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-            <Input placeholder="Name" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} required />
-            <Input placeholder="Category" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} required />
-            <Input type="number" step="0.01" placeholder="Price" value={formData.price} onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value)})} required />
-            <Input placeholder="Description" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
-            
-            <div className="col-span-2 flex gap-3">
-              <Button type="submit">{editingItem ? 'Update' : 'Create'}</Button>
-              <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-3.5 w-5 h-5 text-zinc-400" />
+          <Input 
+            placeholder="Search menu items..." 
+            className="pl-11"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <select 
+          value={selectedCategory} 
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-4 py-3 rounded-2xl border border-input bg-background text-sm"
+        >
+          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+        </select>
+      </div>
+
+      {/* Menu Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredItems.map(item => (
+          <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-sm border border-zinc-100 dark:border-zinc-800">
+            <div className="h-48 bg-zinc-100 dark:bg-zinc-800 relative">
+              {item.imageUrl ? (
+                <img 
+                  src={getImageUrl(item)!} 
+                  alt={item.name} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    console.error("Failed to load image for:", item.name, "URL:", getImageUrl(item));
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">
+                  <ImageIcon className="w-20 h-20 text-zinc-400" />
+                </div>
+              )}
+
+              <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                {item.isActive ? 'Active' : 'Inactive'}
+              </div>
             </div>
-          </form>
+
+            <div className="p-6">
+              <h3 className="font-semibold text-lg">{item.name}</h3>
+              <p className="text-sm text-zinc-500 mt-1">{item.category}</p>
+              <p className="text-2xl font-bold mt-3">${item.price.toFixed(2)}</p>
+
+              {item.availableFrom && (
+                <p className="text-xs text-zinc-500 mt-2">
+                  {item.availableFrom} - {item.availableUntil}
+                </p>
+              )}
+
+              <div className="flex gap-2 mt-6">
+                <Button variant="outline" size="sm" onClick={() => openModal(item)}>
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDeactivate(item.id)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-auto">
+            <div className="p-8">
+              <h2 className="text-2xl font-semibold mb-6">
+                {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
+              </h2>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Item Image</label>
+                  <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-6 text-center">
+                    {imagePreview ? (
+                      <img src={imagePreview} alt="Preview" className="mx-auto max-h-48 rounded-xl object-cover" />
+                    ) : (
+                      <Upload className="w-12 h-12 mx-auto text-zinc-400" />
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleImageChange}
+                      className="mt-4 block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+                    />
+                  </div>
+                </div>
+
+                <Input 
+                  placeholder="Item Name" 
+                  value={formData.name} 
+                  onChange={e => setFormData({...formData, name: e.target.value})} 
+                  required 
+                />
+
+                <Input 
+                  placeholder="Category" 
+                  value={formData.category} 
+                  onChange={e => setFormData({...formData, category: e.target.value})} 
+                  required 
+                />
+
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="Price" 
+                  value={formData.price} 
+                  onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} 
+                  required 
+                />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Available From</label>
+                    <Input 
+                      type="time" 
+                      value={formData.availableFrom} 
+                      onChange={e => setFormData({...formData, availableFrom: e.target.value})} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Available Until</label>
+                    <Input 
+                      type="time" 
+                      value={formData.availableUntil} 
+                      onChange={e => setFormData({...formData, availableUntil: e.target.value})} 
+                    />
+                  </div>
+                </div>
+
+                <Input 
+                  placeholder="Description (optional)" 
+                  value={formData.description} 
+                  onChange={e => setFormData({...formData, description: e.target.value})} 
+                />
+
+                <div className="flex gap-3 pt-4">
+                  <Button type="submit" className="flex-1">
+                    {editingItem ? 'Update Item' : 'Create Item'}
+                  </Button>
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
       )}
-
-      {/* Table */}
-      <div className="bg-white rounded-2xl shadow overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-zinc-50">
-              <th className="text-left p-4">Name</th>
-              <th className="text-left p-4">Category</th>
-              <th className="text-left p-4">Price</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-right p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {menuItems.map(item => (
-              <tr key={item.id} className="border-b hover:bg-zinc-50">
-                <td className="p-4 font-medium">{item.name}</td>
-                <td className="p-4">{item.category}</td>
-                <td className="p-4">${item.price.toFixed(2)}</td>
-                <td className="p-4">
-                  <span className={`px-3 py-1 rounded-full text-xs ${item.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {item.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="p-4 text-right space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(item)}>
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleDelete(item.id)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

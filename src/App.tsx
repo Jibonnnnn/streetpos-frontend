@@ -4,6 +4,8 @@ import Layout from "@/components/layout";
 import Dashboard from "@/pages/Dashboard";
 import MenuPage from "@/pages/Menu";
 import UsersPage from "@/pages/Users";
+import ManagerPage from "@/pages/Manager";
+import CashierPage from "@/pages/Cashier";
 
 function ProtectedRoute({ 
   children, 
@@ -31,14 +33,29 @@ function App() {
         <Route path="/login" element={<LoginForm />} />
         
         <Route element={<Layout />}>
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          
+          {/* Manager Routes */}
           <Route 
-            path="/dashboard" 
+            path="/manager" 
             element={
-              <ProtectedRoute>
-                <Dashboard />
+              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                <ManagerPage />
               </ProtectedRoute>
             } 
           />
+          
+          {/* Cashier Routes */}
+          <Route 
+            path="/cashier" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Cashier']}>
+                <CashierPage />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Existing Admin/Manager Pages */}
           <Route 
             path="/menu" 
             element={
