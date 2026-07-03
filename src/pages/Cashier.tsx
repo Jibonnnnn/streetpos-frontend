@@ -37,12 +37,103 @@ export default function CashierPage() {
     setOrdersLoading(true);
     try {
       const res = await api.get('/orders/my-orders');
-      setMyOrders(res.data || []);
+      const payload = res.data;
+
+      if (Array.isArray(payload)) {
+        setMyOrders(payload);
+      } else if (Array.isArray(payload?.orders)) {
+        setMyOrders(payload.orders);
+      } else if (Array.isArray(payload?.data)) {
+        setMyOrders(payload.data);
+      } else if (payload && typeof payload === 'object') {
+        const nestedArray = Object.values(payload).find((value): value is any[] => Array.isArray(value));
+        setMyOrders(Array.isArray(nestedArray) ? nestedArray : []);
+      } else {
+        setMyOrders([]);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setOrdersLoading(false);
     }
+  };
+
+  const parseMoneyValue = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+    if (typeof value === 'string') {
+      const cleaned = value.replace(/[^0-9.-]/g, '').trim();
+      const parsed = Number(cleaned);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (value && typeof value === 'object') {
+      const nested = (value as any)?.amount ?? (value as any)?.value ?? (value as any)?.total ?? (value as any)?.price;
+      return parseMoneyValue(nested);
+    }
+
+    return null;
+  };
+
+  const getOrderTotal = (order: any) => {
+    const positiveCandidates: number[] = [];
+    const candidateValues = [
+      order?.total,
+      order?.totalAmount,
+      order?.grandTotal,
+      order?.amount,
+      order?.totalPrice,
+      order?.price,
+      order?.summary?.total,
+      order?.summary?.amount,
+      order?.payment?.amount,
+      order?.payment?.total,
+    ];
+
+    for (const value of candidateValues) {
+      const parsed = parseMoneyValue(value);
+      if (parsed !== null && parsed > 0) {
+        positiveCandidates.push(parsed);
+      }
+    }
+
+    if (positiveCandidates.length > 0) {
+      return positiveCandidates[0];
+    }
+
+    const itemCollections = [
+      order?.items,
+      order?.orderItems,
+      order?.order_items,
+      order?.lineItems,
+      order?.details,
+      order?.orderDetails,
+    ];
+
+    for (const items of itemCollections) {
+      if (Array.isArray(items)) {
+        return items.reduce((sum: number, item: any) => {
+          const quantity = Number(item?.quantity ?? item?.qty ?? item?.count ?? 1);
+          const directTotal = parseMoneyValue(item?.subtotal ?? item?.itemTotal ?? item?.lineTotal ?? item?.total);
+          if (directTotal !== null && directTotal > 0) {
+            return sum + directTotal;
+          }
+
+          const unitPrice = parseMoneyValue(
+            item?.unitPrice ??
+            item?.price ??
+            item?.itemPrice ??
+            item?.menuItem?.price ??
+            item?.menuItem?.unitPrice ??
+            item?.product?.price
+          );
+
+          return sum + (unitPrice ?? 0) * (Number.isFinite(quantity) ? quantity : 1);
+        }, 0);
+      }
+    }
+
+    return 0;
   };
 
   useEffect(() => {
@@ -74,34 +165,34 @@ export default function CashierPage() {
   };
 
   const calculatePrice = (basePrice: number) => {
-    let extra = 0;
-    currentModifiers.forEach(group => {
-      group.options.forEach(option => {
-        if (selectedOptionIds.includes(option.id)) {
-          extra += option.priceAdjustment;
-        }
-      });
+  let extra = 0;
+  currentModifiers.forEach(group => {
+    group.options.forEach(option => {
+      if (selectedOptionIds.includes(option.id)) {
+        extra += option.priceAdjustment || 0;
+      }
     });
-    return basePrice + extra;
+  });
+  return basePrice + extra;
+};
+
+const addToCart = () => {
+  if (!selectedItem) return;
+
+  const finalPrice = calculatePrice(selectedItem.price);
+
+  const cartItem: CartItem = {
+    ...selectedItem,
+    quantity: 1,
+    selectedModifierOptionIds: [...selectedOptionIds],
+    note: customNote.trim(),
+    itemTotal: finalPrice
   };
 
-  const addToCart = () => {
-    if (!selectedItem) return;
-
-    const price = calculatePrice(selectedItem.price);
-
-    const cartItem: CartItem = {
-      ...selectedItem,
-      quantity: 1,
-      selectedModifierOptionIds: [...selectedOptionIds],
-      note: customNote.trim(),
-      itemTotal: price
-    };
-
-    setCart(prev => [...prev, cartItem]);
-    setTotal(prev => prev + price);
-    setShowModifiersModal(false);
-  };
+  setCart(prev => [...prev, cartItem]);
+  setTotal(prev => prev + finalPrice);   // This must be here
+  setShowModifiersModal(false);
+};
 
   const removeFromCart = (index: number) => {
     const item = cart[index];
@@ -243,7 +334,7 @@ export default function CashierPage() {
                 <div key={order.id} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl text-sm">
                   <div className="flex justify-between">
                     <span className="font-mono">{order.orderNumber}</span>
-                    <span className="font-semibold">₱{order.total}</span>
+                    <span className="font-semibold">₱{getOrderTotal(order).toFixed(2)}</span>
                   </div>
                   <div className="text-zinc-500 mt-1">
                     {order.status} • {new Date(order.createdAt).toLocaleTimeString()}

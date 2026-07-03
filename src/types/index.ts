@@ -39,3 +39,13 @@ export interface CartItem extends MenuItem {
   note?: string;
   itemTotal: number;
 }
+
+export interface User {
+  id: number;
+  employeeId?: string;
+  fullName: string;
+  email: string;
+  phoneNumber?: string;
+  role: 'Admin' | 'Manager' | 'Cashier';
+  isActive: boolean;
+}
