@@ -1,40 +1,41 @@
+export interface ModifierOption {
+  id: number;
+  name: string;
+  priceAdjustment: number;
+}
+
+export interface ModifierGroup {
+  id: number;
+  name: string;
+  isRequired: boolean;
+  displayOrder: number;
+  options: ModifierOption[];
+}
+
 export interface MenuItem {
   id: number;
   name: string;
   description?: string;
   category: string;
   price: number;
-  imageUrl? : string;
-  imageData?: string;
-  modifiers?: string[];
+  imageUrl?: string;
+  displayOrder: number;
+  isActive: boolean;
   availableFrom?: string;
   availableUntil?: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt?: string;
+  modifierGroups: ModifierGroup[];   // ← New
 }
 
-export interface User {
-  id: number;
-  fullName: string;
-  email: string;
-  phoneNumber?: string;
-  employeeId?: string;
-  role: 'Admin' | 'Manager' | 'Cashier';
-  isActive: boolean;
-  createdAt: string;
-  lastLoginAt?: string;
+export interface OrderItemRequest {
+  menuItemId: number;
+  quantity: number;
+  selectedModifierOptionIds: number[];   // ← New
+  itemNotes?: string;
 }
 
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  userId: number;
-  fullName: string;
-  token: string;
-  role: string;
-  expiresAt: string;
+export interface CartItem extends MenuItem {
+  quantity: number;
+  selectedModifierOptionIds: number[];
+  note?: string;
+  itemTotal: number;
 }
