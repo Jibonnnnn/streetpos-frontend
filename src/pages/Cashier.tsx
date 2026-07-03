@@ -3,7 +3,7 @@ import api from '@/lib/api';
 import type { MenuItem, CartItem, ModifierGroup } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { CreditCard, Loader2, X, RefreshCw, Banknote } from 'lucide-react';
+import { CreditCard, Loader2, X, RefreshCw, Eye } from 'lucide-react';
 
 type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Card';
 
@@ -16,18 +16,20 @@ export default function CashierPage() {
   const [loading, setLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // Modifiers Modal
+  // Modals
   const [showModifiersModal, setShowModifiersModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [currentModifiers, setCurrentModifiers] = useState<ModifierGroup[]>([]);
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [customNote, setCustomNote] = useState('');
 
-  // Checkout Modal
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('Cash');
   const [amountTendered, setAmountTendered] = useState('');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const [showOrderDetail, setShowOrderDetail] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   const fetchMenu = async () => {
     try {
@@ -35,7 +37,7 @@ export default function CashierPage() {
       const res = await api.get('/menu');
       setMenuItems(res.data || []);
     } catch (err) {
-      console.error("Cannot connect to backend.");
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -45,12 +47,49 @@ export default function CashierPage() {
     setOrdersLoading(true);
     try {
       const res = await api.get('/orders/my-orders');
-      setMyOrders(Array.isArray(res.data) ? res.data : []);
+      let ordersData = res.data;
+
+      if (Array.isArray(ordersData)) setMyOrders(ordersData);
+      else if (ordersData?.orders && Array.isArray(ordersData.orders)) setMyOrders(ordersData.orders);
+      else if (ordersData?.data && Array.isArray(ordersData.data)) setMyOrders(ordersData.data);
+      else setMyOrders([]);
     } catch (err) {
       console.error(err);
+      setMyOrders([]);
     } finally {
       setOrdersLoading(false);
     }
+  };
+
+  const getOrderTotal = (order: any): number => {
+    if (!order) return 0;
+    const candidates = [order.total, order.Total, order.grandTotal, order.amount, order.subtotal];
+    for (const val of candidates) {
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const parsed = parseFloat(val);
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+    return 0;
+  };
+
+  const getItemName = (item: any, allMenuItems: MenuItem[]) => {
+    if (item.menuItemName) return item.menuItemName;
+    if (item.name) return item.name;
+
+    // Try to match by ID
+    const menuItem = allMenuItems.find(m => 
+      m.id === item.menuItemId || 
+      m.id === item.MenuItemId || 
+      m.id === item.menuItem?.id
+    );
+    return menuItem?.name || `Item #${item.menuItemId || item.id || 'Unknown'}`;
+  };
+
+  const openOrderDetail = (order: any) => {
+    setSelectedOrder(order);
+    setShowOrderDetail(true);
   };
 
   useEffect(() => {
@@ -62,14 +101,12 @@ export default function CashierPage() {
     setSelectedItem(item);
     setSelectedOptionIds([]);
     setCustomNote('');
-
     try {
       const res = await api.get(`/menu/${item.id}`);
       setCurrentModifiers(res.data?.modifierGroups || []);
     } catch (e) {
       setCurrentModifiers([]);
     }
-
     setShowModifiersModal(true);
   };
 
@@ -83,9 +120,7 @@ export default function CashierPage() {
     let extra = 0;
     currentModifiers.forEach(group => {
       group.options.forEach(option => {
-        if (selectedOptionIds.includes(option.id)) {
-          extra += option.priceAdjustment || 0;
-        }
+        if (selectedOptionIds.includes(option.id)) extra += option.priceAdjustment || 0;
       });
     });
     return basePrice + extra;
@@ -93,9 +128,7 @@ export default function CashierPage() {
 
   const addToCart = () => {
     if (!selectedItem) return;
-
     const finalPrice = calculatePrice(selectedItem.price);
-
     const cartItem: CartItem = {
       ...selectedItem,
       quantity: 1,
@@ -103,7 +136,6 @@ export default function CashierPage() {
       note: customNote.trim(),
       itemTotal: finalPrice
     };
-
     setCart(prev => [...prev, cartItem]);
     setTotal(prev => prev + finalPrice);
     setShowModifiersModal(false);
@@ -124,7 +156,6 @@ export default function CashierPage() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
-
     setCheckoutLoading(true);
 
     const orderPayload = {
@@ -139,32 +170,24 @@ export default function CashierPage() {
     };
 
     try {
-      // First create the order
       const createRes = await api.post('/orders', orderPayload);
       const orderId = createRes.data?.id || createRes.data?.order?.id;
 
-      if (!orderId) throw new Error("Failed to create order");
-
-      // Then checkout
       const checkoutPayload = {
         orderId,
         paymentMethod: selectedPaymentMethod,
         amountTendered: selectedPaymentMethod === 'Cash' ? parseFloat(amountTendered) || undefined : undefined,
-        transactionId: selectedPaymentMethod !== 'Cash' ? "TX-" + Date.now() : undefined
+        transactionId: selectedPaymentMethod !== 'Cash' ? `TX-${Date.now()}` : undefined
       };
 
-      const checkoutRes = await api.post('/orders/checkout', checkoutPayload);
-
-      alert(`✅ Order #${checkoutRes.data.orderNumber} completed successfully!`);
-      
-      // Reset
+      await api.post('/orders/checkout', checkoutPayload);
+      alert("✅ Order completed successfully!");
       setCart([]);
       setTotal(0);
       setShowCheckoutModal(false);
       fetchMyOrders();
     } catch (err: any) {
-      console.error(err);
-      alert(err.response?.data?.message || "Checkout failed. Please try again.");
+      alert(err.response?.data?.message || "Checkout failed.");
     } finally {
       setCheckoutLoading(false);
     }
@@ -180,12 +203,7 @@ export default function CashierPage() {
     : 0;
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[70vh]">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-600 mb-4" />
-        <p className="text-zinc-500">Loading menu...</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center h-[70vh]"><Loader2 className="w-10 h-10 animate-spin" /></div>;
   }
 
   return (
@@ -219,17 +237,14 @@ export default function CashierPage() {
         </div>
       </div>
 
-      {/* Sidebar - Cart + Recent Orders */}
+      {/* Sidebar */}
       <div className="space-y-6">
         {/* Cart */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col h-1/2">
           <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
-          
           <div className="flex-1 overflow-auto space-y-4 pr-2">
             {cart.length === 0 ? (
-              <div className="text-center py-20 text-zinc-500">
-                Your cart is empty.<br />Tap items to add.
-              </div>
+              <div className="text-center py-20 text-zinc-500">Your cart is empty.<br />Tap items to add.</div>
             ) : (
               cart.map((item, idx) => (
                 <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl flex justify-between items-center">
@@ -253,14 +268,8 @@ export default function CashierPage() {
               <span className="text-xl text-zinc-500">Total</span>
               <span>₱{total.toFixed(2)}</span>
             </div>
-            
-            <Button 
-              onClick={openCheckout} 
-              className="w-full py-8 text-lg font-semibold"
-              disabled={cart.length === 0}
-            >
-              <CreditCard className="mr-3 w-6 h-6" /> 
-              Proceed to Checkout
+            <Button onClick={openCheckout} className="w-full py-8 text-lg font-semibold" disabled={cart.length === 0}>
+              <CreditCard className="mr-3 w-6 h-6" /> Proceed to Checkout
             </Button>
           </div>
         </div>
@@ -274,18 +283,40 @@ export default function CashierPage() {
             </Button>
           </div>
           
-          <div className="flex-1 overflow-auto space-y-3">
-            {myOrders.length === 0 ? (
-              <p className="text-center text-zinc-500 py-10">No orders yet</p>
+          <div className="flex-1 overflow-auto space-y-3 pr-2">
+            {ordersLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : myOrders.length === 0 ? (
+              <div className="text-center py-12 text-zinc-500">No orders yet.</div>
             ) : (
-              myOrders.slice(0, 5).map(order => (
-                <div key={order.id} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl text-sm">
-                  <div className="flex justify-between">
-                    <span className="font-mono">{order.orderNumber}</span>
-                    <span className="font-semibold">₱{order.total?.toFixed(2) || '0.00'}</span>
+              myOrders.slice(0, 6).map((order) => (
+                <div 
+                  key={order.id} 
+                  className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl text-sm hover:bg-amber-50 transition-all cursor-pointer"
+                  onClick={() => openOrderDetail(order)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-mono font-medium">{order.orderNumber || `ORD-${order.id}`}</div>
+                      <div className="text-xs text-zinc-500">
+                        {new Date(order.createdAt || order.CreatedAt).toLocaleString([], { 
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                        })}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">₱{getOrderTotal(order).toFixed(2)}</div>
+                      <div className={`text-xs capitalize mt-1 px-2 py-0.5 rounded-full inline-block ${
+                        (order.status === 'Completed' || order.Status === 'Completed') 
+                          ? 'bg-emerald-100 text-emerald-700' 
+                          : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {order.status || order.Status || 'Pending'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-zinc-500 mt-1">
-                    {order.status} • {new Date(order.createdAt).toLocaleTimeString()}
+                  <div className="flex items-center gap-1 text-xs text-zinc-500 mt-2">
+                    <Eye className="w-3 h-3" /> Click to view details
                   </div>
                 </div>
               ))
@@ -309,7 +340,6 @@ export default function CashierPage() {
                 </Button>
               </div>
 
-              {/* Modifiers */}
               <div className="space-y-8">
                 {currentModifiers.map(group => (
                   <div key={group.id}>
@@ -356,13 +386,12 @@ export default function CashierPage() {
         </div>
       )}
 
-      {/* Checkout Modal - UC-04 Implementation */}
+      {/* Checkout Modal */}
       {showCheckoutModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
             <div className="p-8">
               <h2 className="text-2xl font-semibold mb-6">Complete Payment</h2>
-              
               <div className="text-4xl font-bold mb-8 text-center">₱{total.toFixed(2)}</div>
 
               <div className="space-y-4 mb-8">
@@ -373,7 +402,7 @@ export default function CashierPage() {
                     className="w-full justify-start text-left h-14"
                     onClick={() => setSelectedPaymentMethod(method)}
                   >
-                    {method === 'Cash' ? <Banknote className="mr-3" /> : <CreditCard className="mr-3" />}
+                    {method === 'Cash' ? <CreditCard className="mr-3" /> : <CreditCard className="mr-3" />}
                     {method}
                   </Button>
                 ))}
@@ -389,25 +418,80 @@ export default function CashierPage() {
                     onChange={(e) => setAmountTendered(e.target.value)}
                     className="text-2xl py-6"
                   />
-                  {changeDue > 0 && (
-                    <p className="text-emerald-600 mt-2 font-medium">Change: ₱{changeDue.toFixed(2)}</p>
-                  )}
+                  {changeDue > 0 && <p className="text-emerald-600 mt-2 font-medium">Change: ₱{changeDue.toFixed(2)}</p>}
                 </div>
               )}
 
               <div className="flex gap-3">
-                <Button 
-                  onClick={handleCheckout} 
-                  disabled={checkoutLoading || (selectedPaymentMethod === 'Cash' && !amountTendered)}
-                  className="flex-1 py-7 text-lg"
-                >
-                  {checkoutLoading ? <Loader2 className="animate-spin mr-2" /> : null}
+                <Button onClick={handleCheckout} disabled={checkoutLoading || (selectedPaymentMethod === 'Cash' && !amountTendered)} className="flex-1 py-7 text-lg">
+                  {checkoutLoading && <Loader2 className="animate-spin mr-2" />}
                   Confirm Payment
                 </Button>
                 <Button variant="outline" className="flex-1 py-7" onClick={() => setShowCheckoutModal(false)}>
                   Cancel
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Detail Modal */}
+      {showOrderDetail && selectedOrder && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold">Order Details</h2>
+                  <p className="font-mono text-sm text-zinc-500">{selectedOrder.orderNumber || `ORD-${selectedOrder.id}`}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowOrderDetail(false)}>
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <p className="text-sm text-zinc-500">Status</p>
+                  <p className="font-medium capitalize">{selectedOrder.status || selectedOrder.Status || 'Pending'}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-zinc-500">Total</p>
+                  <p className="text-3xl font-bold">₱{getOrderTotal(selectedOrder).toFixed(2)}</p>
+                </div>
+
+                {selectedOrder.paymentMethod && (
+                  <div>
+                    <p className="text-sm text-zinc-500">Payment Method</p>
+                    <p className="font-medium">{selectedOrder.paymentMethod}</p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm text-zinc-500 mb-3">Items</p>
+                  <div className="space-y-3">
+                    {(selectedOrder.items || selectedOrder.orderItems || selectedOrder.OrderItems || []).map((item: any, idx: number) => (
+                      <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
+                        <div className="flex justify-between">
+                          <span className="font-medium">{getItemName(item, menuItems)} × {item.quantity || 1}</span>
+                          <span>₱{(item.subtotal || item.itemTotal || 0).toFixed(2)}</span>
+                        </div>
+                        {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                          <div className="text-xs text-zinc-500 mt-1">
+                            {item.selectedModifiers.map((m: any) => m.name).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <Button className="w-full mt-8" onClick={() => setShowOrderDetail(false)}>
+                Close
+              </Button>
             </div>
           </div>
         </div>
