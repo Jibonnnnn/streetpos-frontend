@@ -3,7 +3,9 @@ import api from '@/lib/api';
 import type { MenuItem, CartItem, ModifierGroup } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { CreditCard, Loader2, X, RefreshCw } from 'lucide-react';
+import { CreditCard, Loader2, X, RefreshCw, Banknote } from 'lucide-react';
+
+type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Card';
 
 export default function CashierPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -21,12 +23,18 @@ export default function CashierPage() {
   const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [customNote, setCustomNote] = useState('');
 
+  // Checkout Modal
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('Cash');
+  const [amountTendered, setAmountTendered] = useState('');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
   const fetchMenu = async () => {
     try {
       setLoading(true);
       const res = await api.get('/menu');
       setMenuItems(res.data || []);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Cannot connect to backend.");
     } finally {
       setLoading(false);
@@ -37,103 +45,12 @@ export default function CashierPage() {
     setOrdersLoading(true);
     try {
       const res = await api.get('/orders/my-orders');
-      const payload = res.data;
-
-      if (Array.isArray(payload)) {
-        setMyOrders(payload);
-      } else if (Array.isArray(payload?.orders)) {
-        setMyOrders(payload.orders);
-      } else if (Array.isArray(payload?.data)) {
-        setMyOrders(payload.data);
-      } else if (payload && typeof payload === 'object') {
-        const nestedArray = Object.values(payload).find((value): value is any[] => Array.isArray(value));
-        setMyOrders(Array.isArray(nestedArray) ? nestedArray : []);
-      } else {
-        setMyOrders([]);
-      }
+      setMyOrders(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
     } finally {
       setOrdersLoading(false);
     }
-  };
-
-  const parseMoneyValue = (value: unknown): number | null => {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-
-    if (typeof value === 'string') {
-      const cleaned = value.replace(/[^0-9.-]/g, '').trim();
-      const parsed = Number(cleaned);
-      return Number.isFinite(parsed) ? parsed : null;
-    }
-
-    if (value && typeof value === 'object') {
-      const nested = (value as any)?.amount ?? (value as any)?.value ?? (value as any)?.total ?? (value as any)?.price;
-      return parseMoneyValue(nested);
-    }
-
-    return null;
-  };
-
-  const getOrderTotal = (order: any) => {
-    const positiveCandidates: number[] = [];
-    const candidateValues = [
-      order?.total,
-      order?.totalAmount,
-      order?.grandTotal,
-      order?.amount,
-      order?.totalPrice,
-      order?.price,
-      order?.summary?.total,
-      order?.summary?.amount,
-      order?.payment?.amount,
-      order?.payment?.total,
-    ];
-
-    for (const value of candidateValues) {
-      const parsed = parseMoneyValue(value);
-      if (parsed !== null && parsed > 0) {
-        positiveCandidates.push(parsed);
-      }
-    }
-
-    if (positiveCandidates.length > 0) {
-      return positiveCandidates[0];
-    }
-
-    const itemCollections = [
-      order?.items,
-      order?.orderItems,
-      order?.order_items,
-      order?.lineItems,
-      order?.details,
-      order?.orderDetails,
-    ];
-
-    for (const items of itemCollections) {
-      if (Array.isArray(items)) {
-        return items.reduce((sum: number, item: any) => {
-          const quantity = Number(item?.quantity ?? item?.qty ?? item?.count ?? 1);
-          const directTotal = parseMoneyValue(item?.subtotal ?? item?.itemTotal ?? item?.lineTotal ?? item?.total);
-          if (directTotal !== null && directTotal > 0) {
-            return sum + directTotal;
-          }
-
-          const unitPrice = parseMoneyValue(
-            item?.unitPrice ??
-            item?.price ??
-            item?.itemPrice ??
-            item?.menuItem?.price ??
-            item?.menuItem?.unitPrice ??
-            item?.product?.price
-          );
-
-          return sum + (unitPrice ?? 0) * (Number.isFinite(quantity) ? quantity : 1);
-        }, 0);
-      }
-    }
-
-    return 0;
   };
 
   useEffect(() => {
@@ -148,7 +65,7 @@ export default function CashierPage() {
 
     try {
       const res = await api.get(`/menu/${item.id}`);
-      setCurrentModifiers(res.data.modifierGroups || []);
+      setCurrentModifiers(res.data?.modifierGroups || []);
     } catch (e) {
       setCurrentModifiers([]);
     }
@@ -158,41 +75,39 @@ export default function CashierPage() {
 
   const toggleOption = (optionId: number) => {
     setSelectedOptionIds(prev =>
-      prev.includes(optionId)
-        ? prev.filter(id => id !== optionId)
-        : [...prev, optionId]
+      prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
     );
   };
 
   const calculatePrice = (basePrice: number) => {
-  let extra = 0;
-  currentModifiers.forEach(group => {
-    group.options.forEach(option => {
-      if (selectedOptionIds.includes(option.id)) {
-        extra += option.priceAdjustment || 0;
-      }
+    let extra = 0;
+    currentModifiers.forEach(group => {
+      group.options.forEach(option => {
+        if (selectedOptionIds.includes(option.id)) {
+          extra += option.priceAdjustment || 0;
+        }
+      });
     });
-  });
-  return basePrice + extra;
-};
-
-const addToCart = () => {
-  if (!selectedItem) return;
-
-  const finalPrice = calculatePrice(selectedItem.price);
-
-  const cartItem: CartItem = {
-    ...selectedItem,
-    quantity: 1,
-    selectedModifierOptionIds: [...selectedOptionIds],
-    note: customNote.trim(),
-    itemTotal: finalPrice
+    return basePrice + extra;
   };
 
-  setCart(prev => [...prev, cartItem]);
-  setTotal(prev => prev + finalPrice);   // This must be here
-  setShowModifiersModal(false);
-};
+  const addToCart = () => {
+    if (!selectedItem) return;
+
+    const finalPrice = calculatePrice(selectedItem.price);
+
+    const cartItem: CartItem = {
+      ...selectedItem,
+      quantity: 1,
+      selectedModifierOptionIds: [...selectedOptionIds],
+      note: customNote.trim(),
+      itemTotal: finalPrice
+    };
+
+    setCart(prev => [...prev, cartItem]);
+    setTotal(prev => prev + finalPrice);
+    setShowModifiersModal(false);
+  };
 
   const removeFromCart = (index: number) => {
     const item = cart[index];
@@ -200,8 +115,17 @@ const addToCart = () => {
     setTotal(prev => prev - item.itemTotal);
   };
 
-  const checkout = async () => {
+  const openCheckout = () => {
     if (cart.length === 0) return;
+    setAmountTendered('');
+    setSelectedPaymentMethod('Cash');
+    setShowCheckoutModal(true);
+  };
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+
+    setCheckoutLoading(true);
 
     const orderPayload = {
       tableNumber: "T1",
@@ -215,14 +139,34 @@ const addToCart = () => {
     };
 
     try {
-      await api.post('/orders', orderPayload);
-      alert(`✅ Order placed! Total: ₱${total.toFixed(2)}`);
+      // First create the order
+      const createRes = await api.post('/orders', orderPayload);
+      const orderId = createRes.data?.id || createRes.data?.order?.id;
+
+      if (!orderId) throw new Error("Failed to create order");
+
+      // Then checkout
+      const checkoutPayload = {
+        orderId,
+        paymentMethod: selectedPaymentMethod,
+        amountTendered: selectedPaymentMethod === 'Cash' ? parseFloat(amountTendered) || undefined : undefined,
+        transactionId: selectedPaymentMethod !== 'Cash' ? "TX-" + Date.now() : undefined
+      };
+
+      const checkoutRes = await api.post('/orders/checkout', checkoutPayload);
+
+      alert(`✅ Order #${checkoutRes.data.orderNumber} completed successfully!`);
+      
+      // Reset
       setCart([]);
       setTotal(0);
-      fetchMyOrders(); // Refresh
-    } catch (err) {
-      alert("Failed to place order");
+      setShowCheckoutModal(false);
+      fetchMyOrders();
+    } catch (err: any) {
       console.error(err);
+      alert(err.response?.data?.message || "Checkout failed. Please try again.");
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
@@ -230,6 +174,10 @@ const addToCart = () => {
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const changeDue = selectedPaymentMethod === 'Cash' && amountTendered 
+    ? Math.max(0, parseFloat(amountTendered) - total) 
+    : 0;
 
   if (loading) {
     return (
@@ -271,7 +219,7 @@ const addToCart = () => {
         </div>
       </div>
 
-      {/* Sidebar */}
+      {/* Sidebar - Cart + Recent Orders */}
       <div className="space-y-6">
         {/* Cart */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col h-1/2">
@@ -307,17 +255,17 @@ const addToCart = () => {
             </div>
             
             <Button 
-              onClick={checkout} 
+              onClick={openCheckout} 
               className="w-full py-8 text-lg font-semibold"
               disabled={cart.length === 0}
             >
               <CreditCard className="mr-3 w-6 h-6" /> 
-              Complete Payment
+              Proceed to Checkout
             </Button>
           </div>
         </div>
 
-        {/* My Recent Orders */}
+        {/* Recent Orders */}
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col h-1/2">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-semibold">Recent Orders</h2>
@@ -334,7 +282,7 @@ const addToCart = () => {
                 <div key={order.id} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl text-sm">
                   <div className="flex justify-between">
                     <span className="font-mono">{order.orderNumber}</span>
-                    <span className="font-semibold">₱{getOrderTotal(order).toFixed(2)}</span>
+                    <span className="font-semibold">₱{order.total?.toFixed(2) || '0.00'}</span>
                   </div>
                   <div className="text-zinc-500 mt-1">
                     {order.status} • {new Date(order.createdAt).toLocaleTimeString()}
@@ -346,7 +294,7 @@ const addToCart = () => {
         </div>
       </div>
 
-      {/* Enhanced Modifiers Modal */}
+      {/* Modifiers Modal */}
       {showModifiersModal && selectedItem && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md max-h-[90vh] overflow-auto">
@@ -361,35 +309,29 @@ const addToCart = () => {
                 </Button>
               </div>
 
+              {/* Modifiers */}
               <div className="space-y-8">
-                {currentModifiers.length === 0 ? (
-                  <p className="text-center text-zinc-500 py-8">No modifiers available</p>
-                ) : (
-                  currentModifiers.map(group => (
-                    <div key={group.id}>
-                      <h3 className="font-medium mb-3">{group.name}</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {group.options.map(option => (
-                          <label 
-                            key={option.id}
-                            className="flex items-center gap-3 border rounded-2xl p-4 cursor-pointer hover:bg-amber-50 transition-all"
-                          >
-                            <input 
-                              type="checkbox" 
-                              checked={selectedOptionIds.includes(option.id)}
-                              onChange={() => toggleOption(option.id)}
-                              className="accent-amber-600"
-                            />
-                            <div>
-                              <div>{option.name}</div>
-                              {option.priceAdjustment > 0 && <div className="text-xs text-emerald-600">+₱{option.priceAdjustment}</div>}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
+                {currentModifiers.map(group => (
+                  <div key={group.id}>
+                    <h3 className="font-medium mb-3">{group.name}</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {group.options.map(option => (
+                        <label key={option.id} className="flex items-center gap-3 border rounded-2xl p-4 cursor-pointer hover:bg-amber-50">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedOptionIds.includes(option.id)}
+                            onChange={() => toggleOption(option.id)}
+                            className="accent-amber-600"
+                          />
+                          <div>
+                            <div>{option.name}</div>
+                            {option.priceAdjustment > 0 && <div className="text-xs text-emerald-600">+₱{option.priceAdjustment}</div>}
+                          </div>
+                        </label>
+                      ))}
                     </div>
-                  ))
-                )}
+                  </div>
+                ))}
               </div>
 
               <div className="mt-8">
@@ -406,6 +348,63 @@ const addToCart = () => {
                   Add to Order - ₱{calculatePrice(selectedItem.price).toFixed(2)}
                 </Button>
                 <Button variant="outline" className="flex-1" onClick={() => setShowModifiersModal(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Modal - UC-04 Implementation */}
+      {showCheckoutModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
+            <div className="p-8">
+              <h2 className="text-2xl font-semibold mb-6">Complete Payment</h2>
+              
+              <div className="text-4xl font-bold mb-8 text-center">₱{total.toFixed(2)}</div>
+
+              <div className="space-y-4 mb-8">
+                {(['Cash', 'GCash', 'Maya', 'Card'] as PaymentMethod[]).map(method => (
+                  <Button
+                    key={method}
+                    variant={selectedPaymentMethod === method ? "default" : "outline"}
+                    className="w-full justify-start text-left h-14"
+                    onClick={() => setSelectedPaymentMethod(method)}
+                  >
+                    {method === 'Cash' ? <Banknote className="mr-3" /> : <CreditCard className="mr-3" />}
+                    {method}
+                  </Button>
+                ))}
+              </div>
+
+              {selectedPaymentMethod === 'Cash' && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2">Amount Tendered</label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={amountTendered}
+                    onChange={(e) => setAmountTendered(e.target.value)}
+                    className="text-2xl py-6"
+                  />
+                  {changeDue > 0 && (
+                    <p className="text-emerald-600 mt-2 font-medium">Change: ₱{changeDue.toFixed(2)}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button 
+                  onClick={handleCheckout} 
+                  disabled={checkoutLoading || (selectedPaymentMethod === 'Cash' && !amountTendered)}
+                  className="flex-1 py-7 text-lg"
+                >
+                  {checkoutLoading ? <Loader2 className="animate-spin mr-2" /> : null}
+                  Confirm Payment
+                </Button>
+                <Button variant="outline" className="flex-1 py-7" onClick={() => setShowCheckoutModal(false)}>
                   Cancel
                 </Button>
               </div>
