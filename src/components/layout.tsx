@@ -1,5 +1,5 @@
-import { useEffect, useState, type ElementType } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   LayoutDashboard, 
   Coffee, 
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 interface NavItem {
   label: string;
   href: string;
-  icon: ElementType;
+  icon: React.ElementType;
   roles: string[];
 }
 
@@ -28,26 +28,32 @@ const navItems: NavItem[] = [
   { label: 'Staff Management', href: '/users', icon: Users, roles: ['Admin'] },
 ];
 
+export function PageHeader({ 
+  title, 
+  description, 
+  actions 
+}: { 
+  title: string; 
+  description?: string; 
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="flex justify-between items-end mb-8">
+      <div>
+        <h1 className="text-4xl font-bold tracking-tight">{title}</h1>
+        {description && <p className="text-zinc-600 dark:text-zinc-400 mt-1">{description}</p>}
+      </div>
+      {actions && <div className="flex gap-3">{actions}</div>}
+    </div>
+  );
+}
+
 export default function Layout() {
-  const [userRole, setUserRole] = useState<string>('');
-  const [userName, setUserName] = useState<string>('');
+  const { user, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const role = localStorage.getItem('userRole') || '';
-    const name = localStorage.getItem('fullName') || 'User';
-    setUserRole(role);
-    setUserName(name);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate('/login');
-  };
 
   const filteredNavItems = navItems.filter(item => 
-    item.roles.includes(userRole)
+    item.roles.includes(user?.role || '')
   );
 
   return (
@@ -106,8 +112,8 @@ export default function Layout() {
                 <UserCog className="w-4 h-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{userName}</p>
-                <p className="text-xs text-zinc-500 capitalize">{userRole}</p>
+                <p className="font-medium truncate">{user?.fullName || 'User'}</p>
+                <p className="text-xs text-zinc-500 capitalize">{user?.role}</p>
               </div>
             </div>
           </div>
@@ -115,7 +121,7 @@ export default function Layout() {
           <Button 
             variant="outline" 
             className="w-full justify-start gap-2 rounded-2xl border-zinc-200/80 bg-white/70 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60"
-            onClick={handleLogout}
+            onClick={logout}
           >
             <LogOut className="w-4 h-4" />
             Sign Out

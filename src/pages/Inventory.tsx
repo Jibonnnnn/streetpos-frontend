@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import { DataTable } from '@/components/common/DataTable';
+import { PageHeader } from '@/components/layout';
 
 export default function InventoryPage() {
   const [inventory, setInventory] = useState<InventoryItemResponse[]>([]);
@@ -96,65 +98,59 @@ export default function InventoryPage() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center">Loading inventory...</div>;
+  const columns = [
+    { header: "Item Name", accessor: "name" as const },
+    { header: "Unit", accessor: "unit" as const },
+    { header: "Current Stock", accessor: "currentStock" as const },
+    { header: "Reorder Point", accessor: "reorderPoint" as const },
+    { 
+      header: "Status", 
+      accessor: (item: InventoryItemResponse) => item.isLowStock ? (
+        <span className="inline-flex items-center gap-1 text-amber-600 text-sm">
+          <AlertTriangle size={16} /> Low Stock
+        </span>
+      ) : (
+        <span className="text-emerald-600 text-sm">In Stock</span>
+      )
+    },
+  ];
+
+  const actions = (item: InventoryItemResponse) => (
+    <div className="flex gap-2 justify-end">
+      <Button variant="outline" size="sm" onClick={() => openAdjustModal(item)}>
+        Update Stock
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm" 
+        className="text-red-600 hover:bg-red-50" 
+        onClick={() => handleDelete(item.id)}
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+  );
 
   return (
     <div className="p-8">
       <Toaster position="top-center" richColors closeButton />
 
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">Inventory Management</h1>
-        <Button onClick={openCreateModal}>
-          <Plus className="w-4 h-4 mr-2" /> New Item
-        </Button>
-      </div>
+      <PageHeader 
+        title="Inventory Management" 
+        actions={
+          <Button onClick={openCreateModal}>
+            <Plus className="w-4 h-4 mr-2" /> New Item
+          </Button>
+        }
+      />
 
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-zinc-50 dark:bg-zinc-800">
-              <th className="text-left p-4">Item Name</th>
-              <th className="text-left p-4">Unit</th>
-              <th className="text-right p-4">Current Stock</th>
-              <th className="text-right p-4">Reorder Point</th>
-              <th className="text-center p-4">Status</th>
-              <th className="text-right p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inventory.map(item => (
-              <tr key={item.id} className="border-b hover:bg-zinc-50 dark:hover:bg-zinc-800">
-                <td className="p-4 font-medium">{item.name}</td>
-                <td className="p-4 text-zinc-600">{item.unit}</td>
-                <td className="p-4 text-right font-semibold">{item.currentStock}</td>
-                <td className="p-4 text-right">{item.reorderPoint}</td>
-                <td className="p-4 text-center">
-                  {item.isLowStock ? (
-                    <span className="inline-flex items-center gap-1 text-amber-600 text-sm">
-                      <AlertTriangle size={16} /> Low Stock
-                    </span>
-                  ) : (
-                    <span className="text-emerald-600 text-sm">In Stock</span>
-                  )}
-                </td>
-                <td className="p-4 text-right space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => openAdjustModal(item)}>
-                    Update Stock
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="text-red-600 hover:bg-red-50" 
-                    onClick={() => handleDelete(item.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable 
+        data={inventory}
+        columns={columns}
+        loading={loading}
+        actions={actions}
+        emptyMessage="No inventory items found."
+      />
 
       {/* Create Modal */}
       {showModal && (

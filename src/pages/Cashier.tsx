@@ -5,15 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CreditCard, Loader2, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import { useCart } from '@/contexts/CartContext';
+import { PageHeader } from '@/components/layout';
 
 type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Card';
 
 export default function CashierPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [myOrders, setMyOrders] = useState<OrderResponse[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -31,6 +31,8 @@ export default function CashierPage() {
 
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null);
+
+  const { cart, addToCart, removeFromCart, clearCart, total } = useCart();
 
   const fetchMenu = async () => {
     try {
@@ -102,7 +104,7 @@ export default function CashierPage() {
     return basePrice + extra;
   };
 
-  const addToCart = () => {
+  const handleAddToCart = () => {
     if (!selectedItem) return;
 
     const finalPrice = calculatePrice(selectedItem.price);
@@ -114,16 +116,9 @@ export default function CashierPage() {
       itemTotal: finalPrice
     };
 
-    setCart(prev => [...prev, cartItem]);
-    setTotal(prev => prev + finalPrice);
+    addToCart(cartItem);
     setShowModifiersModal(false);
     toast.success(`${selectedItem.name} added to order`);
-  };
-
-  const removeFromCart = (index: number) => {
-    const item = cart[index];
-    setCart(prev => prev.filter((_, i) => i !== index));
-    setTotal(prev => prev - item.itemTotal);
   };
 
   const openCheckout = () => {
@@ -170,8 +165,7 @@ export default function CashierPage() {
       });
 
       await fetchMenu();
-      setCart([]);
-      setTotal(0);
+      clearCart();
       setShowCheckoutModal(false);
       fetchMyOrders();
     } catch (err: any) {
@@ -203,15 +197,17 @@ export default function CashierPage() {
     <div className="p-6 max-w-screen-2xl mx-auto">
       <Toaster position="top-center" richColors closeButton />
 
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">POS Terminal</h1>
-        <Input
-          placeholder="Search menu items..."
-          className="max-w-md"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
+      <PageHeader 
+        title="POS Terminal" 
+        actions={
+          <Input
+            placeholder="Search menu items..."
+            className="max-w-md"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Menu Items Grid */}
@@ -254,9 +250,8 @@ export default function CashierPage() {
           </div>
         </div>
 
-        {/* Sidebar */}
+        {/* Sidebar - Current Order */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Current Order */}
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-sm">
             <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
             
@@ -390,7 +385,7 @@ export default function CashierPage() {
               </div>
 
               <div className="flex gap-3 mt-8">
-                <Button onClick={addToCart} className="flex-1 py-7 text-lg">
+                <Button onClick={handleAddToCart} className="flex-1 py-7 text-lg">
                   Add - ₱{calculatePrice(selectedItem.price).toFixed(2)}
                 </Button>
                 <Button variant="outline" className="flex-1 py-7" onClick={() => setShowModifiersModal(false)}>
@@ -465,7 +460,7 @@ export default function CashierPage() {
                   <X className="w-5 h-5" />
                 </Button>
               </div>
-              {/* Order details content */}
+              {/* Add more order details here if needed */}
               <Button className="w-full mt-8" onClick={() => setShowOrderDetail(false)}>Close</Button>
             </div>
           </div>

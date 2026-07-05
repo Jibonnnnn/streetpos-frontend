@@ -7,7 +7,8 @@ import MenuPage from "@/pages/Menu";
 import UsersPage from "@/pages/Users";
 import ManagerPage from "@/pages/Manager";
 import CashierPage from "@/pages/Cashier";
-import {Toaster} from "sonner";
+import { Toaster } from "sonner";
+import { CartProvider } from '@/contexts/CartContext';
 
 function ProtectedRoute({ 
   children, 
@@ -31,64 +32,62 @@ function ProtectedRoute({
 function App() {
   return (
     <BrowserRouter>
-
-    <Toaster position="top-center" richColors closeButton />
-      <Routes>
-        <Route path="/login" element={<LoginForm />} />
+      <CartProvider>
+        <Toaster position="top-center" richColors closeButton />
+        <Routes>
+          <Route path="/login" element={<LoginForm />} />
         
-        <Route element={<Layout />}>
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route element={<Layout />}>
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
 
-          <Route 
-            path="/inventory" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                <InventoryPage />
-              </ProtectedRoute>
-            } 
-          />
+            <Route 
+              path="/inventory" 
+              element={
+                <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                  <InventoryPage />
+                </ProtectedRoute>
+              } 
+            />
           
-          {/* Manager Routes */}
-          <Route 
-            path="/manager" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                <ManagerPage />
-              </ProtectedRoute>
-            } 
-          />
+            <Route 
+              path="/manager" 
+              element={
+                <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                  <ManagerPage />
+                </ProtectedRoute>
+              } 
+            />
           
-          {/* Cashier Routes */}
-          <Route 
-            path="/cashier" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Cashier']}>
-                <CashierPage />
-              </ProtectedRoute>
-            } 
-          />
+            <Route 
+              path="/cashier" 
+              element={
+                <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Cashier']}>
+                  <CashierPage />
+                </ProtectedRoute>
+              } 
+            />
 
-          {/* Existing Admin/Manager Pages */}
-          <Route 
-            path="/menu" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                <MenuPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/users" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin']}>
-                <UsersPage />
-              </ProtectedRoute>
-            } 
-          />
-        </Route>
+            <Route 
+              path="/menu" 
+              element={
+                <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                  <MenuPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/users" 
+              element={
+                <ProtectedRoute allowedRoles={['Admin']}>
+                  <UsersPage />
+                </ProtectedRoute>
+              } 
+            />
+          </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </CartProvider>
     </BrowserRouter>
   );
 }

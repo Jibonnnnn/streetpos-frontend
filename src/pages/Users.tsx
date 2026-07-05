@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import { DataTable } from '@/components/common/DataTable';
+import { PageHeader } from '@/components/layout';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -117,9 +119,7 @@ export default function UsersPage() {
       setShowModal(false);
       fetchUsers();
     } catch (err: any) {
-      const msg = err.response?.data?.message || 
-                  err.response?.data?.error || 
-                  "Failed to save staff. Please check your input.";
+      const msg = err.response?.data?.message || "Failed to save staff.";
       toast.error(msg);
     }
   };
@@ -136,74 +136,73 @@ export default function UsersPage() {
     }
   };
 
+  const columns = [
+    { header: "Employee ID", accessor: (u: User) => u.employeeId || '-' },
+    { header: "Full Name", accessor: "fullName" as const },
+    { header: "Email", accessor: "email" as const },
+    { 
+      header: "Role", 
+      accessor: (u: User) => (
+        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+          u.role === 'Admin' ? 'bg-red-100 text-red-700' :
+          u.role === 'Manager' ? 'bg-blue-100 text-blue-700' : 
+          'bg-emerald-100 text-emerald-700'
+        }`}>
+          {u.role}
+        </span>
+      )
+    },
+    { 
+      header: "Status", 
+      accessor: (u: User) => (
+        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+          u.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+        }`}>
+          {u.isActive ? 'Active' : 'Inactive'}
+        </span>
+      )
+    },
+  ];
+
+  const actions = (user: User) => (
+    <div className="flex gap-2 justify-end">
+      <Button variant="outline" size="sm" onClick={() => openModal(user)}>
+        <Edit className="w-4 h-4" />
+      </Button>
+      {user.isActive && (
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="text-red-600 hover:bg-red-50"
+          onClick={() => handleDeactivate(user.id)}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      )}
+    </div>
+  );
+
   if (loading) return <div className="p-8">Loading staff...</div>;
 
   return (
-    <div className="p-8 relative">
+    <div className="p-8">
       <Toaster position="top-center" richColors closeButton />
 
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">Staff Management</h1>
-        <Button onClick={() => openModal()}>
-          <Plus className="w-4 h-4 mr-2" /> Add New Staff
-        </Button>
-      </div>
+      <PageHeader 
+        title="Staff Management" 
+        actions={
+          <Button onClick={() => openModal()}>
+            <Plus className="w-4 h-4 mr-2" /> Add New Staff
+          </Button>
+        }
+      />
 
-      {/* Table */}
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-zinc-50 dark:bg-zinc-800">
-              <th className="text-left p-4">Employee ID</th>
-              <th className="text-left p-4">Full Name</th>
-              <th className="text-left p-4">Email</th>
-              <th className="text-left p-4">Role</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-right p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-b hover:bg-zinc-50 dark:hover:bg-zinc-800">
-                <td className="p-4 font-mono font-medium">{user.employeeId || '-'}</td>
-                <td className="p-4 font-medium">{user.fullName}</td>
-                <td className="p-4 text-zinc-600">{user.email}</td>
-                <td className="p-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    user.role === 'Admin' ? 'bg-red-100 text-red-700' :
-                    user.role === 'Manager' ? 'bg-blue-100 text-blue-700' : 
-                    'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    {user.role}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                    user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {user.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="p-4 text-right flex gap-2 justify-end">
-                  <Button variant="outline" size="sm" onClick={() => openModal(user)}>
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  {user.isActive && (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="text-red-600 hover:bg-red-50"
-                      onClick={() => handleDeactivate(user.id)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable 
+        data={users}
+        columns={columns}
+        loading={loading}
+        actions={actions}
+      />
 
       {/* Add/Edit Modal */}
       {showModal && (

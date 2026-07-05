@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Edit, Trash2, ImageIcon } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import { DataTable } from '@/components/common/DataTable';
+import { PageHeader } from '@/components/layout';
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -149,58 +151,64 @@ export default function MenuPage() {
     return item.imageUrl ? `http://localhost:5032${item.imageUrl}` : null;
   };
 
+  const columns = [
+    { 
+      header: "Image", 
+      accessor: (item: MenuItem) => (
+        <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden">
+          {getImageUrl(item) ? (
+            <img src={getImageUrl(item)!} alt={item.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="flex items-center justify-center h-full text-3xl opacity-30">☕</div>
+          )}
+        </div>
+      )
+    },
+    { header: "Name", accessor: "name" as const },
+    { header: "Category", accessor: "category" as const },
+    { header: "Price", accessor: (item: MenuItem) => `₱${item.price}` },
+    { 
+      header: "Status", 
+      accessor: (item: MenuItem) => (
+        <span className={`px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+          {item.isActive ? 'Active' : 'Inactive'}
+        </span>
+      )
+    },
+  ];
+
+  const actions = (item: MenuItem) => (
+    <div className="flex gap-2">
+      <Button variant="outline" size="sm" onClick={() => openModal(item)}>
+        <Edit className="w-4 h-4" />
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => handleDeactivate(item.id)}>
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+
   if (loading) return <div className="p-8 text-center">Loading menu...</div>;
 
   return (
     <div className="p-8">
       <Toaster position="top-center" richColors closeButton />
 
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">Menu Management</h1>
-        <Button onClick={() => openModal()}>
-          <Plus className="w-4 h-4 mr-2" /> Add New Item
-        </Button>
-      </div>
+      <PageHeader 
+        title="Menu Management" 
+        actions={
+          <Button onClick={() => openModal()}>
+            <Plus className="w-4 h-4 mr-2" /> Add New Item
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {menuItems.map(item => (
-          <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-sm border">
-            <div className="h-48 bg-zinc-100 dark:bg-zinc-800 relative">
-              {getImageUrl(item) ? (
-                <img src={getImageUrl(item)!} alt={item.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="flex items-center justify-center h-full text-6xl opacity-30">
-                  <ImageIcon className="w-20 h-20" />
-                </div>
-              )}
-
-              <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-                {item.isActive ? 'Active' : 'Inactive'}
-              </div>
-            </div>
-
-            <div className="p-6">
-              <h3 className="font-semibold text-xl">{item.name}</h3>
-              <p className="text-sm text-zinc-500 mt-1">{item.category} • ₱{item.price}</p>
-
-              {item.inventoryLinks && item.inventoryLinks.length > 0 && (
-                <div className="mt-3 text-xs text-zinc-500">
-                  Uses: {item.inventoryLinks.map(l => l.inventoryItemName).join(', ')}
-                </div>
-              )}
-
-              <div className="flex gap-2 mt-6">
-                <Button variant="outline" size="sm" onClick={() => openModal(item)}>
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleDeactivate(item.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <DataTable 
+        data={menuItems}
+        columns={columns}
+        loading={loading}
+        actions={actions}
+      />
 
       {/* Create / Edit Modal */}
       {showModal && (
