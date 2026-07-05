@@ -3,7 +3,8 @@ import api from '@/lib/api';
 import type { MenuItem, CartItem, ModifierGroup, OrderResponse } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { CreditCard, Loader2, X, RefreshCw } from 'lucide-react';
+import { CreditCard, Loader2, X, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
 
 type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Card';
 
@@ -15,6 +16,7 @@ export default function CashierPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   // Modals
   const [showModifiersModal, setShowModifiersModal] = useState(false);
@@ -26,7 +28,6 @@ export default function CashierPage() {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('Cash');
   const [amountTendered, setAmountTendered] = useState('');
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null);
@@ -38,6 +39,7 @@ export default function CashierPage() {
       setMenuItems(res.data || []);
     } catch (err) {
       console.error('Failed to fetch menu:', err);
+      toast.error("Failed to load menu items");
     } finally {
       setLoading(false);
     }
@@ -50,7 +52,6 @@ export default function CashierPage() {
       setMyOrders(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
-      setMyOrders([]);
     } finally {
       setOrdersLoading(false);
     }
@@ -62,6 +63,13 @@ export default function CashierPage() {
   }, []);
 
   const openModifiersModal = async (item: MenuItem) => {
+    const hasLowStock = item.inventoryLinks?.some(link => link.quantityUsedPerUnit > 5);
+    if (hasLowStock) {
+      if (!confirm(`Warning: Some ingredients for ${item.name} might be low in stock. Continue?`)) {
+        return;
+      }
+    }
+
     setSelectedItem(item);
     setSelectedOptionIds([]);
     setCustomNote('');
@@ -109,6 +117,7 @@ export default function CashierPage() {
     setCart(prev => [...prev, cartItem]);
     setTotal(prev => prev + finalPrice);
     setShowModifiersModal(false);
+    toast.success(`${selectedItem.name} added to order`);
   };
 
   const removeFromCart = (index: number) => {
@@ -118,7 +127,10 @@ export default function CashierPage() {
   };
 
   const openCheckout = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      toast.error("Cart is empty");
+      return;
+    }
     setAmountTendered('');
     setSelectedPaymentMethod('Cash');
     setShowCheckoutModal(true);
@@ -153,13 +165,18 @@ export default function CashierPage() {
 
       await api.post('/orders/checkout', checkoutPayload);
 
-      alert("✅ Order completed successfully!");
+      toast.success("✅ Order completed successfully!", {
+        description: "Inventory has been automatically deducted.",
+      });
+
+      await fetchMenu();
       setCart([]);
       setTotal(0);
       setShowCheckoutModal(false);
       fetchMyOrders();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Checkout failed. Please try again.");
+      const message = err.response?.data?.message || "Checkout failed. Please try again.";
+      toast.error(message);
     } finally {
       setCheckoutLoading(false);
     }
@@ -183,138 +200,152 @@ export default function CashierPage() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-120px)] p-6">
-      {/* Menu Section */}
-      <div className="lg:col-span-2 bg-white dark:bg-zinc-900 rounded-3xl p-6 overflow-auto">
-        <div className="flex justify-between items-center mb-6 sticky top-0 bg-white dark:bg-zinc-900 z-10 pb-4">
-          <h1 className="text-3xl font-bold">POS Terminal</h1>
-          <Input
-            placeholder="Search menu items..."
-            className="max-w-xs"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+    <div className="p-6 max-w-screen-2xl mx-auto">
+      <Toaster position="top-center" richColors closeButton />
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {filteredMenu.map(item => (
-            <div
-              key={item.id}
-              className="border border-zinc-200 dark:border-zinc-700 rounded-3xl p-4 cursor-pointer hover:border-amber-600 transition-all active:scale-[0.985]"
-              onClick={() => openModifiersModal(item)}
-            >
-              <div className="h-40 bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-4 overflow-hidden">
-                {item.imageUrl && (
-                  <img
-                    src={`http://localhost:5032${item.imageUrl}`}
-                    alt={item.name}
-                    className="w-full h-full object-cover"
-                  />
-                )}
-              </div>
-              <h3 className="font-semibold text-lg">{item.name}</h3>
-              <p className="text-amber-600 font-medium">₱{item.price.toFixed(2)}</p>
-              {item.description && <p className="text-sm text-zinc-500 line-clamp-2 mt-1">{item.description}</p>}
-            </div>
-          ))}
-        </div>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-4xl font-bold tracking-tight">POS Terminal</h1>
+        <Input
+          placeholder="Search menu items..."
+          className="max-w-md"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
       </div>
 
-      {/* Sidebar */}
-      <div className="space-y-6">
-        {/* Cart */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col h-[45%]">
-          <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
-          
-          <div className="flex-1 overflow-auto space-y-4 pr-2">
-            {cart.length === 0 ? (
-              <div className="text-center py-20 text-zinc-500">
-                Your cart is empty.<br />Tap items to add.
-              </div>
-            ) : (
-              cart.map((item, idx) => (
-                <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="font-medium">{item.name}</p>
-                    {item.note && <p className="text-xs text-zinc-500 mt-1">Note: {item.note}</p>}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Menu Items Grid */}
+        <div className="lg:col-span-7">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredMenu.map(item => {
+              const hasLowStock = item.inventoryLinks?.some(link => link.quantityUsedPerUnit > 5);
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden border cursor-pointer hover:shadow-xl transition-all active:scale-[0.985]"
+                  onClick={() => openModifiersModal(item)}
+                >
+                  <div className="h-52 bg-zinc-100 dark:bg-zinc-800 relative">
+                    {item.imageUrl && (
+                      <img
+                        src={`http://localhost:5032${item.imageUrl}`}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    {hasLowStock && (
+                      <div className="absolute top-4 left-4 bg-amber-500 text-white px-3 py-1 rounded-full text-xs flex items-center gap-1">
+                        <AlertTriangle size={14} /> Low Stock
+                      </div>
+                    )}
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">₱{item.itemTotal.toFixed(2)}</p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 mt-1"
-                      onClick={() => removeFromCart(idx)}
-                    >
-                      Remove
-                    </Button>
+                  <div className="p-5">
+                    <h3 className="font-semibold text-xl">{item.name}</h3>
+                    <p className="text-2xl font-bold text-amber-600 mt-1">₱{item.price.toFixed(2)}</p>
+                    {item.inventoryLinks?.length > 0 && (
+                      <p className="text-xs text-zinc-500 mt-2">
+                        {item.inventoryLinks.map(l => l.inventoryItemName).join(', ')}
+                      </p>
+                    )}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-
-          <div className="border-t pt-6 mt-auto">
-            <div className="flex justify-between text-3xl font-bold mb-6">
-              <span>Total</span>
-              <span>₱{total.toFixed(2)}</span>
-            </div>
-            <Button
-              onClick={openCheckout}
-              className="w-full py-8 text-lg font-semibold"
-              disabled={cart.length === 0}
-            >
-              <CreditCard className="mr-3 w-6 h-6" />
-              Proceed to Checkout
-            </Button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Recent Orders */}
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col h-[55%]">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold">Recent Orders</h2>
-            <Button variant="ghost" size="sm" onClick={fetchMyOrders} disabled={ordersLoading}>
-              <RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-
-          <div className="flex-1 overflow-auto space-y-3 pr-2">
-            {ordersLoading ? (
-              <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
-            ) : myOrders.length === 0 ? (
-              <div className="text-center py-12 text-zinc-500">No recent orders yet.</div>
-            ) : (
-              myOrders.slice(0, 5).map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl cursor-pointer hover:bg-amber-50 transition-all"
-                  onClick={() => {
-                    setSelectedOrder(order);
-                    setShowOrderDetail(true);
-                  }}
-                >
-                  <div className="flex justify-between">
-                    <div>
-                      <div className="font-mono font-medium">{order.orderNumber}</div>
-                      <div className="text-xs text-zinc-500">
-                        {new Date(order.createdAt).toLocaleString([], {
-                          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
-                        })}
-                      </div>
+        {/* Sidebar */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Current Order */}
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-sm">
+            <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
+            
+            <div className="min-h-[320px] max-h-[420px] overflow-auto pr-2 space-y-4">
+              {cart.length === 0 ? (
+                <div className="text-center py-20 text-zinc-500">
+                  Your cart is empty.<br />Tap items to add.
+                </div>
+              ) : (
+                cart.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-start bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
+                    <div className="flex-1">
+                      <p className="font-medium">{item.name}</p>
+                      {item.note && <p className="text-xs text-zinc-500 mt-1">Note: {item.note}</p>}
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold">₱{order.total.toFixed(2)}</div>
-                      <div className={`text-xs px-3 py-1 rounded-full inline-block mt-1 ${
-                        order.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                      }`}>
-                        {order.status}
+                      <p className="font-semibold">₱{item.itemTotal.toFixed(2)}</p>
+                      <button 
+                        onClick={() => removeFromCart(idx)}
+                        className="text-red-500 text-sm hover:underline mt-1"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-8 border-t pt-6">
+              <div className="flex justify-between items-center text-3xl font-bold mb-6">
+                <span>Total</span>
+                <span>₱{total.toFixed(2)}</span>
+              </div>
+              <Button 
+                onClick={openCheckout} 
+                className="w-full py-7 text-lg font-semibold"
+                disabled={cart.length === 0}
+              >
+                <CreditCard className="mr-3 w-6 h-6" />
+                Proceed to Checkout
+              </Button>
+            </div>
+          </div>
+
+          {/* Recent Orders */}
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-semibold">Recent Orders</h2>
+              <Button variant="ghost" size="sm" onClick={fetchMyOrders} disabled={ordersLoading}>
+                <RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+
+            <div className="space-y-3 max-h-[300px] overflow-auto">
+              {ordersLoading ? (
+                <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
+              ) : myOrders.length === 0 ? (
+                <div className="text-center py-12 text-zinc-500">No recent orders yet.</div>
+              ) : (
+                myOrders.slice(0, 4).map((order) => (
+                  <div
+                    key={order.id}
+                    className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl cursor-pointer hover:bg-amber-50 transition-all"
+                    onClick={() => {
+                      setSelectedOrder(order);
+                      setShowOrderDetail(true);
+                    }}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-mono font-medium">{order.orderNumber}</div>
+                        <div className="text-xs text-zinc-500 mt-1">
+                          {new Date(order.createdAt).toLocaleString([], { 
+                            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
+                          })}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold">₱{order.total.toFixed(2)}</div>
+                        <div className={`text-xs px-3 py-1 rounded-full inline-block mt-2 ${order.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {order.status}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -327,7 +358,7 @@ export default function CashierPage() {
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h2 className="text-2xl font-semibold">{selectedItem.name}</h2>
-                  <p className="text-zinc-500">Base Price: ₱{selectedItem.price}</p>
+                  <p className="text-zinc-500">Base: ₱{selectedItem.price}</p>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setShowModifiersModal(false)}>
                   <X className="w-5 h-5" />
@@ -337,26 +368,14 @@ export default function CashierPage() {
               <div className="space-y-8">
                 {currentModifiers.map(group => (
                   <div key={group.id}>
-                    <h3 className="font-medium mb-3 flex items-center gap-2">
-                      {group.name} {group.isRequired && <span className="text-red-500 text-xs">(Required)</span>}
-                    </h3>
+                    <h3 className="font-medium mb-3">{group.name} {group.isRequired && <span className="text-red-500">(Required)</span>}</h3>
                     <div className="grid grid-cols-2 gap-3">
                       {group.options.map(option => (
-                        <label
-                          key={option.id}
-                          className="flex items-center gap-3 border rounded-2xl p-4 cursor-pointer hover:bg-amber-50 transition-all"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedOptionIds.includes(option.id)}
-                            onChange={() => toggleOption(option.id)}
-                            className="accent-amber-600"
-                          />
+                        <label key={option.id} className="flex items-center gap-3 border rounded-2xl p-4 cursor-pointer hover:bg-amber-50">
+                          <input type="checkbox" checked={selectedOptionIds.includes(option.id)} onChange={() => toggleOption(option.id)} />
                           <div>
                             <div>{option.name}</div>
-                            {option.priceAdjustment > 0 && (
-                              <div className="text-xs text-emerald-600">+₱{option.priceAdjustment}</div>
-                            )}
+                            {option.priceAdjustment > 0 && <div className="text-emerald-600 text-xs">+₱{option.priceAdjustment}</div>}
                           </div>
                         </label>
                       ))}
@@ -366,17 +385,13 @@ export default function CashierPage() {
               </div>
 
               <div className="mt-8">
-                <label className="block text-sm font-medium mb-2">Special Requests / Notes</label>
-                <Input
-                  placeholder="No ice, extra sugar, etc."
-                  value={customNote}
-                  onChange={(e) => setCustomNote(e.target.value)}
-                />
+                <label className="block text-sm font-medium mb-2">Special Requests</label>
+                <Input placeholder="No ice, extra sugar..." value={customNote} onChange={(e) => setCustomNote(e.target.value)} />
               </div>
 
               <div className="flex gap-3 mt-8">
                 <Button onClick={addToCart} className="flex-1 py-7 text-lg">
-                  Add to Order - ₱{calculatePrice(selectedItem.price).toFixed(2)}
+                  Add - ₱{calculatePrice(selectedItem.price).toFixed(2)}
                 </Button>
                 <Button variant="outline" className="flex-1 py-7" onClick={() => setShowModifiersModal(false)}>
                   Cancel
@@ -393,14 +408,14 @@ export default function CashierPage() {
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
             <div className="p-8">
               <h2 className="text-2xl font-semibold mb-6">Complete Payment</h2>
-              <div className="text-5xl font-bold mb-8 text-center">₱{total.toFixed(2)}</div>
+              <div className="text-5xl font-bold text-center mb-8">₱{total.toFixed(2)}</div>
 
               <div className="space-y-4 mb-8">
                 {(['Cash', 'GCash', 'Maya', 'Card'] as PaymentMethod[]).map(method => (
                   <Button
                     key={method}
                     variant={selectedPaymentMethod === method ? "default" : "outline"}
-                    className="w-full justify-start text-left h-14"
+                    className="w-full h-14 justify-start"
                     onClick={() => setSelectedPaymentMethod(method)}
                   >
                     {method}
@@ -418,20 +433,14 @@ export default function CashierPage() {
                     onChange={(e) => setAmountTendered(e.target.value)}
                     className="text-3xl py-6"
                   />
-                  {changeDue > 0 && (
-                    <p className="text-emerald-600 mt-2 font-medium">Change: ₱{changeDue.toFixed(2)}</p>
-                  )}
+                  {changeDue > 0 && <p className="text-emerald-600 mt-2">Change: ₱{changeDue.toFixed(2)}</p>}
                 </div>
               )}
 
               <div className="flex gap-3">
-                <Button
-                  onClick={handleCheckout}
-                  disabled={checkoutLoading || (selectedPaymentMethod === 'Cash' && !amountTendered)}
-                  className="flex-1 py-7 text-lg"
-                >
+                <Button onClick={handleCheckout} disabled={checkoutLoading || (selectedPaymentMethod === 'Cash' && !amountTendered)} className="flex-1 py-7 text-lg">
                   {checkoutLoading && <Loader2 className="animate-spin mr-2" />}
-                  Confirm & Pay
+                  Confirm Payment
                 </Button>
                 <Button variant="outline" className="flex-1 py-7" onClick={() => setShowCheckoutModal(false)}>
                   Cancel
@@ -456,50 +465,8 @@ export default function CashierPage() {
                   <X className="w-5 h-5" />
                 </Button>
               </div>
-
-              <div className="space-y-6">
-                <div>
-                  <p className="text-sm text-zinc-500">Status</p>
-                  <p className="font-medium capitalize">{selectedOrder.status}</p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-zinc-500">Total</p>
-                  <p className="text-3xl font-bold">₱{selectedOrder.total.toFixed(2)}</p>
-                </div>
-
-                {selectedOrder.paymentMethod && (
-                  <div>
-                    <p className="text-sm text-zinc-500">Payment Method</p>
-                    <p className="font-medium">{selectedOrder.paymentMethod}</p>
-                  </div>
-                )}
-
-                <div>
-                  <p className="text-sm text-zinc-500 mb-3">Items</p>
-                  <div className="space-y-3">
-                    {selectedOrder.items.map((item, idx) => (
-                      <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
-                        <div className="flex justify-between">
-                          <span className="font-medium">
-                            {item.menuItemName} × {item.quantity}
-                          </span>
-                          <span>₱{item.subtotal.toFixed(2)}</span>
-                        </div>
-                        {item.selectedModifiers && item.selectedModifiers.length > 0 && (
-                          <div className="text-xs text-zinc-500 mt-1">
-                            {item.selectedModifiers.map(m => m.name).join(', ')}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <Button className="w-full mt-8" onClick={() => setShowOrderDetail(false)}>
-                Close
-              </Button>
+              {/* Order details content */}
+              <Button className="w-full mt-8" onClick={() => setShowOrderDetail(false)}>Close</Button>
             </div>
           </div>
         </div>

@@ -9,7 +9,13 @@ export interface MenuItem {
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;
+  
+  // Availability times
+  availableFrom?: string;
+  availableUntil?: string;
+
   modifierGroups: ModifierGroup[];
+  inventoryLinks: MenuItemInventoryLink[];
 }
 
 export interface ModifierGroup {
@@ -26,11 +32,29 @@ export interface ModifierOption {
   priceAdjustment: number;
 }
 
+export interface MenuItemInventoryLink {
+  inventoryItemId: number;
+  inventoryItemName: string;
+  unit: string;
+  quantityUsedPerUnit: number;
+}
+
+export interface MenuItemInventoryLinkRequest {
+  inventoryItemId: number;
+  quantityUsedPerUnit: number;
+}
+
 export interface CartItem extends MenuItem {
   quantity: number;
   selectedModifierOptionIds: number[];
   note?: string;
   itemTotal: number;
+}
+
+export interface SelectedModifierResponse {
+  modifierOptionId: number;
+  name: string;
+  priceAdjustment: number;
 }
 
 export interface OrderItemResponse {
@@ -42,12 +66,6 @@ export interface OrderItemResponse {
   subtotal: number;
   itemNotes?: string;
   selectedModifiers: SelectedModifierResponse[];
-}
-
-export interface SelectedModifierResponse {
-  modifierOptionId: number;
-  name: string;
-  priceAdjustment: number;
 }
 
 export interface OrderResponse {
