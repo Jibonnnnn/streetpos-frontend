@@ -9,8 +9,6 @@ export interface MenuItem {
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;
-  availableFrom?: string;
-  availableUntil?: string;
   modifierGroups: ModifierGroup[];
 }
 
@@ -72,18 +70,6 @@ export interface OrderResponse {
   items: OrderItemResponse[];
 }
 
-export interface User {
-  id: number;
-  employeeId?: string;
-  fullName: string;
-  email: string;
-  phoneNumber?: string;
-  role: 'Admin' | 'Manager' | 'Cashier';
-  isActive: boolean;
-  createdAt: string;
-  lastLoginAt?: string;
-}
-
 export interface InventoryItemResponse {
   id: number;
   name: string;
@@ -95,4 +81,16 @@ export interface InventoryItemResponse {
   isActive: boolean;
   isLowStock: boolean;
   createdAt: string;
+}
+
+export interface User {
+  id: number;
+  employeeId?: string;
+  fullName: string;
+  email: string;
+  phoneNumber?: string;
+  role: 'Admin' | 'Manager' | 'Cashier';
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
 }
