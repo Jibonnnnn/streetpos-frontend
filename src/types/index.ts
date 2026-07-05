@@ -1,7 +1,17 @@
-export interface ModifierOption {
+export interface MenuItem {
   id: number;
   name: string;
-  priceAdjustment: number;
+  description?: string;
+  category: string;
+  price: number;
+  imageUrl?: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  availableFrom?: string;
+  availableUntil?: string;
+  modifierGroups: ModifierGroup[];
 }
 
 export interface ModifierGroup {
@@ -12,25 +22,10 @@ export interface ModifierGroup {
   options: ModifierOption[];
 }
 
-export interface MenuItem {
+export interface ModifierOption {
   id: number;
   name: string;
-  description?: string;
-  category: string;
-  price: number;
-  imageUrl?: string;
-  displayOrder: number;
-  isActive: boolean;
-  availableFrom?: string;
-  availableUntil?: string;
-  modifierGroups: ModifierGroup[];   // ← New
-}
-
-export interface OrderItemRequest {
-  menuItemId: number;
-  quantity: number;
-  selectedModifierOptionIds: number[];   // ← New
-  itemNotes?: string;
+  priceAdjustment: number;
 }
 
 export interface CartItem extends MenuItem {
@@ -38,6 +33,43 @@ export interface CartItem extends MenuItem {
   selectedModifierOptionIds: number[];
   note?: string;
   itemTotal: number;
+}
+
+export interface OrderItemResponse {
+  id: number;
+  menuItemId: number;
+  menuItemName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  itemNotes?: string;
+  selectedModifiers: SelectedModifierResponse[];
+}
+
+export interface SelectedModifierResponse {
+  modifierOptionId: number;
+  name: string;
+  priceAdjustment: number;
+}
+
+export interface OrderResponse {
+  id: number;
+  orderNumber: string;
+  cashierId: number;
+  cashierName: string;
+  tableNumber?: string;
+  customerNotes?: string;
+  status: 'Pending' | 'Preparing' | 'Ready' | 'Completed' | 'Cancelled';
+  subtotal: number;
+  tax: number;
+  total: number;
+  createdAt: string;
+  completedAt?: string;
+  paymentMethod?: 'Cash' | 'GCash' | 'Maya' | 'Card' | 'Other';
+  amountTendered?: number;
+  changeDue?: number;
+  transactionReference?: string;
+  items: OrderItemResponse[];
 }
 
 export interface User {
@@ -48,4 +80,19 @@ export interface User {
   phoneNumber?: string;
   role: 'Admin' | 'Manager' | 'Cashier';
   isActive: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface InventoryItemResponse {
+  id: number;
+  name: string;
+  description?: string;
+  currentStock: number;
+  unit: string;
+  reorderPoint: number;
+  reorderQuantity: number;
+  isActive: boolean;
+  isLowStock: boolean;
+  createdAt: string;
 }

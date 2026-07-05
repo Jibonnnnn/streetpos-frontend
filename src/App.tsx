@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LoginForm } from "@/components/login-form";
 import Layout from "@/components/layout";
 import Dashboard from "@/pages/Dashboard";
+import InventoryPage from "@/pages/Inventory";
 import MenuPage from "@/pages/Menu";
 import UsersPage from "@/pages/Users";
 import ManagerPage from "@/pages/Manager";
@@ -37,6 +38,15 @@ function App() {
         
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+
+          <Route 
+            path="/inventory" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                <InventoryPage />
+              </ProtectedRoute>
+            } 
+          />
           
           {/* Manager Routes */}
           <Route 

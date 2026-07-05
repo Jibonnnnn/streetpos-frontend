@@ -80,213 +80,6 @@ vite.config.ts
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/pages/Cashier.tsx">
-import { useEffect, useState } from 'react';
-import api from '@/lib/api';
-import type { MenuItem } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Trash2, CreditCard } from 'lucide-react';
-
-export default function CashierPage() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [total, setTotal] = useState(0);
-
-  // Load menu on mount
-  useEffect(() => {
-    api.get('/menu').then(res => setMenuItems(res.data));
-  }, []);
-
-  const addToCart = (item: MenuItem) => {
-    setCart(prev => [...prev, { ...item, quantity: 1 }]);
-    setTotal(prev => prev + item.price);
-  };
-
-  const removeFromCart = (index: number) => {
-    const item = cart[index];
-    setCart(prev => prev.filter((_, i) => i !== index));
-    setTotal(prev => prev - item.price * item.quantity);
-  };
-
-  const checkout = () => {
-    alert(`Checkout successful! Total: $${total.toFixed(2)}\n(Real payment integration would go here)`);
-    setCart([]);
-    setTotal(0);
-  };
-
-  const filteredMenu = menuItems.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[calc(100vh-120px)]">
-      {/* Menu Section */}
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 overflow-auto">
-        <div className="flex justify-between mb-6">
-          <h1 className="text-3xl font-bold">POS Terminal</h1>
-          <Input 
-            placeholder="Search menu..." 
-            className="max-w-xs"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          {filteredMenu.map(item => (
-            <div 
-              key={item.id}
-              className="border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 cursor-pointer hover:border-amber-500 transition-colors"
-              onClick={() => addToCart(item)}
-            >
-              {item.imageUrl && <img src={item.imageUrl} className="w-full h-32 object-cover rounded-xl mb-3" />}
-              <h3 className="font-semibold">{item.name}</h3>
-              <p className="text-2xl font-bold text-amber-600">${item.price}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Cart / Checkout */}
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col">
-        <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
-        
-        <div className="flex-1 overflow-auto space-y-4">
-          {cart.length === 0 ? (
-            <p className="text-zinc-500 text-center py-12">Cart is empty. Add items from the left.</p>
-          ) : (
-            cart.map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
-                <div>
-                  <p>{item.name}</p>
-                  <p className="text-sm text-zinc-500">x{item.quantity}</p>
-                </div>
-                <div className="flex items-center gap-4">
-                  <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
-                  <Button variant="ghost" size="sm" onClick={() => removeFromCart(idx)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="border-t pt-6 mt-auto">
-          <div className="flex justify-between text-3xl font-bold mb-6">
-            <span>Total</span>
-            <span>${total.toFixed(2)}</span>
-          </div>
-          
-          <Button onClick={checkout} className="w-full py-8 text-lg" disabled={cart.length === 0}>
-            <CreditCard className="mr-3" /> Complete Payment
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/Manager.tsx">
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { TrendingUp, Users, Coffee, AlertTriangle } from 'lucide-react';
-
-export default function ManagerPage() {
-  const [stats] = useState({
-    todaySales: 1284,
-    orders: 47,
-    lowStock: 3,
-    topItem: "Iced Latte"
-  });
-
-  useEffect(() => {
-    // In real app, fetch from /reports or dedicated endpoints
-    console.log("Manager dashboard data loaded");
-  }, []);
-
-  return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight">Manager Dashboard</h1>
-          <p className="text-zinc-600 dark:text-zinc-400">Daily operations overview</p>
-        </div>
-        <Button>Generate Full Report</Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardContent className="p-8">
-            <div className="flex items-center justify-between">
-              <TrendingUp className="w-10 h-10 text-emerald-600" />
-              <span className="text-emerald-600 text-sm font-medium">+18% from yesterday</span>
-            </div>
-            <p className="text-5xl font-semibold mt-6">${stats.todaySales}</p>
-            <p className="text-sm text-zinc-500 mt-1">Today's Sales</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-8">
-            <div className="flex items-center justify-between">
-              <Coffee className="w-10 h-10 text-amber-600" />
-            </div>
-            <p className="text-5xl font-semibold mt-6">{stats.orders}</p>
-            <p className="text-sm text-zinc-500 mt-1">Orders Today</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-8">
-            <div className="flex items-center justify-between">
-              <AlertTriangle className="w-10 h-10 text-orange-600" />
-            </div>
-            <p className="text-5xl font-semibold mt-6 text-orange-600">{stats.lowStock}</p>
-            <p className="text-sm text-zinc-500 mt-1">Low Stock Items</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-8">
-            <div className="flex items-center justify-between">
-              <Users className="w-10 h-10 text-violet-600" />
-            </div>
-            <p className="text-5xl font-semibold mt-6">12</p>
-            <p className="text-sm text-zinc-500 mt-1">Active Staff</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardContent className="p-8">
-            <h3 className="font-semibold mb-4">Top Selling Items</h3>
-            <p className="text-2xl">{stats.topItem}</p>
-            <p className="text-sm text-zinc-500">42 sold today</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-8">
-            <h3 className="font-semibold mb-4">Quick Actions</h3>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="outline" onClick={() => window.location.href = '/menu'}>Manage Menu</Button>
-              <Button variant="outline">View Inventory</Button>
-              <Button variant="outline">Staff Schedule</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-</file>
-
 <file path=".gitignore">
 # Logs
 logs
@@ -367,51 +160,6 @@ dist-ssr
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-</file>
-
-<file path="package.json">
-{
-  "name": "streetpos-frontend",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@fontsource-variable/dm-sans": "^5.2.8",
-    "@fontsource-variable/geist": "^5.2.9",
-    "@fontsource-variable/instrument-sans": "^5.2.8",
-    "@fontsource-variable/public-sans": "^5.2.7",
-    "@tailwindcss/vite": "^4.3.2",
-    "autoprefixer": "^10.5.2",
-    "axios": "^1.18.1",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "lucide-react": "^1.23.0",
-    "postcss": "^8.5.16",
-    "radix-ui": "^1.6.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1",
-    "shadcn": "^4.12.0",
-    "tailwind-merge": "^3.6.0",
-    "tailwindcss": "^4.3.2",
-    "tw-animate-css": "^1.4.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.13.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.2",
-    "oxlint": "^1.69.0",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.0"
-  }
-}
 </file>
 
 <file path="public/favicon.svg">
@@ -667,320 +415,12 @@ See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rule
 }
 </file>
 
-<file path="src/App.tsx">
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { LoginForm } from "@/components/login-form";
-import Layout from "@/components/layout";
-import Dashboard from "@/pages/Dashboard";
-import MenuPage from "@/pages/Menu";
-import UsersPage from "@/pages/Users";
-import ManagerPage from "@/pages/Manager";
-import CashierPage from "@/pages/Cashier";
-
-function ProtectedRoute({ 
-  children, 
-  allowedRoles 
-}: { 
-  children: React.ReactNode; 
-  allowedRoles?: string[]; 
-}) {
-  const token = localStorage.getItem('token');
-  const userRole = localStorage.getItem('userRole');
-
-  if (!token) return <Navigate to="/login" replace />;
-
-  if (allowedRoles && !allowedRoles.includes(userRole || '')) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
-}
-
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginForm />} />
-        
-        <Route element={<Layout />}>
-          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          
-          {/* Manager Routes */}
-          <Route 
-            path="/manager" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                <ManagerPage />
-              </ProtectedRoute>
-            } 
-          />
-          
-          {/* Cashier Routes */}
-          <Route 
-            path="/cashier" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Cashier']}>
-                <CashierPage />
-              </ProtectedRoute>
-            } 
-          />
-
-          {/* Existing Admin/Manager Pages */}
-          <Route 
-            path="/menu" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
-                <MenuPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/users" 
-            element={
-              <ProtectedRoute allowedRoles={['Admin']}>
-                <UsersPage />
-              </ProtectedRoute>
-            } 
-          />
-        </Route>
-
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
-
-export default App;
-</file>
-
 <file path="src/assets/react.svg">
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="35.93" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 228"><path fill="#00D8FF" d="M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z"></path></svg>
 </file>
 
 <file path="src/assets/vite.svg">
 <svg xmlns="http://www.w3.org/2000/svg" width="77" height="47" fill="none" aria-labelledby="vite-logo-title" viewBox="0 0 77 47"><title id="vite-logo-title">Vite</title><style>.parenthesis{fill:#000}@media (prefers-color-scheme:dark){.parenthesis{fill:#fff}}</style><path fill="#9135ff" d="M40.151 45.71c-.663.844-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.493c-.92 0-1.457-1.04-.92-1.788l7.479-10.471c1.07-1.498 0-3.578-1.842-3.578H15.443c-.92 0-1.456-1.04-.92-1.788l9.696-13.576c.213-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.472c-1.07 1.497 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.087.89 1.83L40.153 45.712z"/><mask id="a" width="48" height="47" x="14" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M40.047 45.71c-.663.843-2.02.374-2.02-.699V34.708a2.26 2.26 0 0 0-2.262-2.262H24.389c-.92 0-1.457-1.04-.92-1.788l7.479-10.472c1.07-1.497 0-3.578-1.842-3.578H15.34c-.92 0-1.456-1.04-.92-1.788l9.696-13.575c.213-.297.556-.474.92-.474H53.93c.92 0 1.456 1.04.92 1.788L47.37 13.03c-1.07 1.498 0 3.578 1.842 3.578h11.376c.944 0 1.474 1.088.89 1.831L40.049 45.712z"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#eee6ff" rx="5.508" ry="14.704" transform="rotate(269.814 20.96 11.29)scale(-1 1)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#eee6ff" rx="10.399" ry="29.851" transform="rotate(89.814 -16.902 -8.275)scale(1 -1)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#8900ff" rx="5.508" ry="30.487" transform="rotate(89.814 -19.197 -7.127)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.928 4.177)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#8900ff" rx="5.508" ry="30.599" transform="rotate(89.814 -25.738 5.52)scale(1 -1)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#eee6ff" rx="14.072" ry="22.078" transform="rotate(93.35 31.245 55.578)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#8900ff" rx="3.47" ry="21.501" transform="rotate(89.009 35.419 55.202)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx="14.592" cy="9.743" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(39.51 14.592 9.743)"/></g><g filter="url(#k)"><ellipse cx="61.728" cy="-5.321" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 61.728 -5.32)"/></g><g filter="url(#l)"><ellipse cx="55.618" cy="7.104" fill="#00c2ff" rx="5.971" ry="9.665" transform="rotate(37.892 55.618 7.104)"/></g><g filter="url(#m)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#n)"><ellipse cx="12.326" cy="39.103" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 12.326 39.103)"/></g><g filter="url(#o)"><ellipse cx="49.857" cy="30.678" fill="#8900ff" rx="4.407" ry="29.108" transform="rotate(37.892 49.857 30.678)"/></g><g filter="url(#p)"><ellipse cx="52.623" cy="33.171" fill="#00c2ff" rx="5.971" ry="15.297" transform="rotate(37.892 52.623 33.17)"/></g></g><path d="M6.919 0c-9.198 13.166-9.252 33.575 0 46.789h6.215c-9.25-13.214-9.196-33.623 0-46.789zm62.424 0h-6.215c9.198 13.166 9.252 33.575 0 46.789h6.215c9.25-13.214 9.196-33.623 0-46.789" class="parenthesis"/><defs><filter id="b" width="60.045" height="41.654" x="-5.564" y="16.92" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-40.407" y="-6.762" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-35.435" y="2.801" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-30.84" y="20.8" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-29.307" y="21.949" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="29.961" y="-17.13" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="37.754" y="3.055" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-13.43" y="-22.082" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="34.321" y="-37.644" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="38.847" y="-10.552" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-15.081" y="6.78" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="22.45" y="-1.645" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="32.919" y="11.36" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17286" stdDeviation="4.596"/></filter></defs></svg>
-</file>
-
-<file path="src/components/layout.tsx">
-import { useEffect, useState } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Coffee, 
-  Users, 
-  BarChart3, 
-  UserCog, 
-  LogOut 
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ElementType;
-  roles: string[];
-}
-
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['Admin', 'Manager', 'Cashier'] },
-  { label: 'POS Terminal', href: '/cashier', icon: Coffee, roles: ['Admin', 'Manager', 'Cashier'] },
-  { label: 'Menu Management', href: '/menu', icon: Coffee, roles: ['Admin', 'Manager'] },
-  { label: 'Manager Hub', href: '/manager', icon: BarChart3, roles: ['Admin', 'Manager'] },
-  { label: 'Staff Management', href: '/users', icon: Users, roles: ['Admin'] },
-];
-
-export default function Layout() {
-  const [userRole, setUserRole] = useState<string>('');
-  const [userName, setUserName] = useState<string>('');
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const role = localStorage.getItem('userRole') || '';
-    const name = localStorage.getItem('fullName') || 'User';
-    setUserRole(role);
-    setUserName(name);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate('/login');
-  };
-
-  const filteredNavItems = navItems.filter(item => 
-    item.roles.includes(userRole)
-  );
-
-  return (
-    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">
-      {/* Sidebar */}
-      <div className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col">
-        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-violet-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl">
-              ☕
-            </div>
-            <div>
-              <h1 className="font-semibold text-2xl tracking-tight">StreetPOS</h1>
-              <p className="text-xs text-zinc-500">Café Management</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 p-6">
-          <nav className="space-y-2">
-            {filteredNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.href;
-              
-              return (
-                <Link
-                  key={item.href}
-                  to={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all",
-                    isActive 
-                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" 
-                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* User Footer */}
-        <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 mt-auto">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-9 h-9 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-lg">
-              <UserCog className="w-4 h-4" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{userName}</p>
-              <p className="text-xs text-zinc-500 capitalize">{userRole}</p>
-            </div>
-          </div>
-
-          <Button 
-            variant="outline" 
-            className="w-full justify-start gap-2"
-            onClick={handleLogout}
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
-          </Button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        <main className="p-10">
-          <Outlet />
-        </main>
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="src/components/login-form.tsx">
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-
-export function LoginForm() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await api.post('/auth/login', { email, password });
-      const { token, fullName, role } = response.data;
-
-      localStorage.setItem('token', token);
-      localStorage.setItem('fullName', fullName);
-      localStorage.setItem('userRole', role);
-
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 dark:from-zinc-950 dark:to-zinc-900 p-4">
-      <div className="w-full max-w-[960px] grid md:grid-cols-2 bg-white dark:bg-zinc-900 rounded-3xl shadow-xl overflow-hidden">
-        {/* Form Side */}
-        <div className="p-10 md:p-16 flex flex-col justify-center">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center text-white text-4xl">☕</div>
-            <div>
-              <h1 className="text-4xl font-bold tracking-tighter">StreetPOS</h1>
-              <p className="text-sm text-amber-600">Café Operations</p>
-            </div>
-          </div>
-
-          <h2 className="text-3xl font-semibold mb-2">Welcome back</h2>
-          <p className="text-zinc-600 dark:text-zinc-400 mb-8">Sign in to manage your café</p>
-
-          {error && <div className="mb-6 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 p-4 rounded-2xl text-sm">{error}</div>}
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="text-sm font-medium block mb-2">Email Address</label>
-              <Input 
-                type="email" 
-                placeholder="admin@streetpos.com" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                required 
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium block mb-2">Password</label>
-              <Input 
-                type="password" 
-                placeholder="••••••••" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)}
-                required 
-              />
-            </div>
-
-            <Button type="submit" className="w-full h-12 text-base" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
-            </Button>
-          </form>
-        </div>
-
-        {/* Visual Side */}
-        <div className="hidden md:flex bg-gradient-to-br from-amber-600 via-orange-600 to-red-600 items-center justify-center relative overflow-hidden">
-          <div className="text-white text-center z-10">
-            <div className="text-7xl mb-6">☕</div>
-            <h3 className="text-4xl font-bold tracking-tight mb-3">Run your café</h3>
-            <p className="max-w-xs mx-auto opacity-90">Efficiently. Beautifully. Profitably.</p>
-          </div>
-          <div className="absolute inset-0 bg-[radial-gradient(#ffffff33_1px,transparent_1px)] [background-size:20px_20px]"></div>
-        </div>
-      </div>
-    </div>
-  );
-}
 </file>
 
 <file path="src/components/ui/button.tsx">
@@ -1610,36 +1050,6 @@ export { Separator }
 }
 </file>
 
-<file path="src/lib/api.ts">
-import axios from 'axios';
-
-const API_BASE = 'http://localhost:5032/api';
-
-const api = axios.create({
-  baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.clear();
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default api;
-</file>
-
 <file path="src/lib/utils.ts">
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
@@ -1662,531 +1072,100 @@ createRoot(document.getElementById('root')!).render(
 )
 </file>
 
-<file path="src/pages/Dashboard.tsx">
-import { useEffect, useState } from 'react';
-import api from '@/lib/api';
-import { Coffee, Users, TrendingUp, Clock } from 'lucide-react';
-
-interface Stat {
-  title: string;
-  value: number | string;
-  icon: React.ElementType;
-  change?: string;
-}
-
-export default function Dashboard() {
-  const [stats, setStats] = useState<Stat[]>([
-    { title: "Menu Items", value: 0, icon: Coffee },
-    { title: "Staff", value: 0, icon: Users },
-    { title: "Today's Sales", value: "$1,284", icon: TrendingUp, change: "+12%" },
-    { title: "Open Orders", value: 7, icon: Clock },
-  ]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [menuRes, usersRes] = await Promise.all([
-          api.get('/menu'),
-          api.get('/users')
-        ]);
-        setStats(prev => prev.map((s, i) => {
-          if (i === 0) return { ...s, value: menuRes.data.length };
-          if (i === 1) return { ...s, value: usersRes.data.length };
-          return s;
-        }));
-      } catch (e) { console.error(e); }
-    };
-    fetchData();
-  }, []);
-
-  return (
-    <div>
-      <div className="flex justify-between items-end mb-10">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tight">Good afternoon, Team</h1>
-          <p className="text-zinc-600 dark:text-zinc-400 mt-1">Here's what's happening at StreetPOS today</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <stat.icon className="w-9 h-9 text-amber-600" />
-              {stat.change && <span className="text-emerald-600 text-sm font-medium">{stat.change}</span>}
-            </div>
-            <p className="text-5xl font-semibold mt-8 mb-1">{stat.value}</p>
-            <p className="text-sm text-zinc-500">{stat.title}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Recent Activity */}
-      <div className="mt-12">
-        <h2 className="text-xl font-semibold mb-6">Recent Activity</h2>
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
-          <p className="text-zinc-500 italic">Mock recent transactions would appear here in a full implementation.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/Menu.tsx">
+<file path="src/pages/Manager.tsx">
 import { useState, useEffect } from 'react';
-import api from '@/lib/api';
-import type { MenuItem } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Plus, Edit, Trash2, Search, Upload, Image as ImageIcon } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { TrendingUp, Users, Coffee, AlertTriangle } from 'lucide-react';
 
-export default function MenuPage() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-
-  const [showModal, setShowModal] = useState(false);
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    category: '',
-    price: 0,
-    availableFrom: '',
-    availableUntil: '',
-    modifiers: [] as string[],
+export default function ManagerPage() {
+  const [stats] = useState({
+    todaySales: 1284,
+    orders: 47,
+    lowStock: 3,
+    topItem: "Iced Latte"
   });
 
-  const categories = ['All', 'Coffee', 'Tea', 'Pastry', 'Breakfast', 'Sandwich', 'Dessert', 'Other'];
-
   useEffect(() => {
-    fetchMenu();
+    // In real app, fetch from /reports or dedicated endpoints
+    console.log("Manager dashboard data loaded");
   }, []);
 
-  useEffect(() => {
-    let result = [...menuItems];
-    if (searchTerm) {
-      result = result.filter(item => 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.category.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    if (selectedCategory !== 'All') {
-      result = result.filter(item => item.category === selectedCategory);
-    }
-    setFilteredItems(result);
-  }, [menuItems, searchTerm, selectedCategory]);
-
-  const fetchMenu = async () => {
-    try {
-      const res = await api.get('/menu');
-      setMenuItems(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openModal = (item?: MenuItem) => {
-    if (item) {
-      setEditingItem(item);
-      setFormData({
-        name: item.name,
-        description: item.description || '',
-        category: item.category,
-        price: item.price,
-        availableFrom: item.availableFrom ? item.availableFrom.slice(0, 5) : '',
-        availableUntil: item.availableUntil ? item.availableUntil.slice(0, 5) : '',
-        modifiers: item.modifiers || [],
-      });
-      setImagePreview(item.imageUrl || null);
-    } else {
-      setEditingItem(null);
-      setFormData({ 
-        name: '', 
-        description: '', 
-        category: '', 
-        price: 0, 
-        availableFrom: '', 
-        availableUntil: '', 
-        modifiers: [] 
-      });
-      setImagePreview(null);
-    }
-    setSelectedFile(null);
-    setShowModal(true);
-  };
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      const reader = new FileReader();
-      reader.onload = () => setImagePreview(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const form = new FormData();
-      form.append('name', formData.name);
-      form.append('description', formData.description || '');
-      form.append('category', formData.category);
-      form.append('price', formData.price.toString());
-      
-      if (formData.availableFrom) form.append('availableFrom', formData.availableFrom);
-      if (formData.availableUntil) form.append('availableUntil', formData.availableUntil);
-
-      if (selectedFile) {
-        form.append('imageFile', selectedFile);
-      }
-
-      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
-
-      if (editingItem) {
-        await api.put(`/menu/${editingItem.id}`, form, config);
-      } else {
-        await api.post('/menu', form, config);
-      }
-
-      fetchMenu();
-      setShowModal(false);
-      setImagePreview(null);
-      setSelectedFile(null);
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save item');
-    }
-  };
-
-  const handleDeactivate = async (id: number) => {
-    if (!confirm('Deactivate this item?')) return;
-    try {
-      await api.delete(`/menu/${id}`);
-      fetchMenu();
-    } catch (err) {
-      alert('Failed to deactivate');
-    }
-  };
-
-  // Get full image URL (handles both old and new backend)
-  const getImageUrl = (item: MenuItem): string | null => {
-    if (!item.imageUrl) return null;
-    
-    if (item.imageUrl.startsWith('/api/menu')) {
-      return `http://localhost:5032${item.imageUrl}`;
-    }
-    if (item.imageUrl.startsWith('http')) {
-      return item.imageUrl;
-    }
-    return `http://localhost:5032${item.imageUrl.startsWith('/') ? '' : '/'}${item.imageUrl}`;
-  };
-
-  if (loading) return <div className="p-8 text-center">Loading menu items...</div>;
-
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">Menu Management</h1>
-        <Button onClick={() => openModal()}>
-          <Plus className="w-4 h-4 mr-2" /> Add New Item
-        </Button>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-3.5 w-5 h-5 text-zinc-400" />
-          <Input 
-            placeholder="Search menu items..." 
-            className="pl-11"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+    <div className="space-y-8">
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight">Manager Dashboard</h1>
+          <p className="text-zinc-600 dark:text-zinc-400">Daily operations overview</p>
         </div>
-        <select 
-          value={selectedCategory} 
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="px-4 py-3 rounded-2xl border border-input bg-background text-sm"
-        >
-          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-        </select>
+        <Button>Generate Full Report</Button>
       </div>
 
-      {/* Menu Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredItems.map(item => (
-          <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-sm border border-zinc-100 dark:border-zinc-800">
-            <div className="h-48 bg-zinc-100 dark:bg-zinc-800 relative">
-              {item.imageUrl ? (
-                <img 
-                  src={getImageUrl(item)!} 
-                  alt={item.name} 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    console.error("Failed to load image for:", item.name, "URL:", getImageUrl(item));
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">
-                  <ImageIcon className="w-20 h-20 text-zinc-400" />
-                </div>
-              )}
-
-              <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-                {item.isActive ? 'Active' : 'Inactive'}
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <TrendingUp className="w-10 h-10 text-emerald-600" />
+              <span className="text-emerald-600 text-sm font-medium">+18% from yesterday</span>
             </div>
+            <p className="text-5xl font-semibold mt-6">${stats.todaySales}</p>
+            <p className="text-sm text-zinc-500 mt-1">Today's Sales</p>
+          </CardContent>
+        </Card>
 
-            <div className="p-6">
-              <h3 className="font-semibold text-lg">{item.name}</h3>
-              <p className="text-sm text-zinc-500 mt-1">{item.category}</p>
-              <p className="text-2xl font-bold mt-3">${item.price.toFixed(2)}</p>
-
-              {item.availableFrom && (
-                <p className="text-xs text-zinc-500 mt-2">
-                  {item.availableFrom} - {item.availableUntil}
-                </p>
-              )}
-
-              <div className="flex gap-2 mt-6">
-                <Button variant="outline" size="sm" onClick={() => openModal(item)}>
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => handleDeactivate(item.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <Coffee className="w-10 h-10 text-amber-600" />
             </div>
-          </div>
-        ))}
+            <p className="text-5xl font-semibold mt-6">{stats.orders}</p>
+            <p className="text-sm text-zinc-500 mt-1">Orders Today</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <AlertTriangle className="w-10 h-10 text-orange-600" />
+            </div>
+            <p className="text-5xl font-semibold mt-6 text-orange-600">{stats.lowStock}</p>
+            <p className="text-sm text-zinc-500 mt-1">Low Stock Items</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center justify-between">
+              <Users className="w-10 h-10 text-violet-600" />
+            </div>
+            <p className="text-5xl font-semibold mt-6">12</p>
+            <p className="text-sm text-zinc-500 mt-1">Active Staff</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Create/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-auto">
-            <div className="p-8">
-              <h2 className="text-2xl font-semibold mb-6">
-                {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
-              </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardContent className="p-8">
+            <h3 className="font-semibold mb-4">Top Selling Items</h3>
+            <p className="text-2xl">{stats.topItem}</p>
+            <p className="text-sm text-zinc-500">42 sold today</p>
+          </CardContent>
+        </Card>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Image Upload */}
-                <div>
-                  <label className="block text-sm font-medium mb-2">Item Image</label>
-                  <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-6 text-center">
-                    {imagePreview ? (
-                      <img src={imagePreview} alt="Preview" className="mx-auto max-h-48 rounded-xl object-cover" />
-                    ) : (
-                      <Upload className="w-12 h-12 mx-auto text-zinc-400" />
-                    )}
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      onChange={handleImageChange}
-                      className="mt-4 block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
-                    />
-                  </div>
-                </div>
-
-                <Input 
-                  placeholder="Item Name" 
-                  value={formData.name} 
-                  onChange={e => setFormData({...formData, name: e.target.value})} 
-                  required 
-                />
-
-                <Input 
-                  placeholder="Category" 
-                  value={formData.category} 
-                  onChange={e => setFormData({...formData, category: e.target.value})} 
-                  required 
-                />
-
-                <Input 
-                  type="number" 
-                  step="0.01" 
-                  placeholder="Price" 
-                  value={formData.price} 
-                  onChange={e => setFormData({...formData, price: parseFloat(e.target.value)})} 
-                  required 
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Available From</label>
-                    <Input 
-                      type="time" 
-                      value={formData.availableFrom} 
-                      onChange={e => setFormData({...formData, availableFrom: e.target.value})} 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Available Until</label>
-                    <Input 
-                      type="time" 
-                      value={formData.availableUntil} 
-                      onChange={e => setFormData({...formData, availableUntil: e.target.value})} 
-                    />
-                  </div>
-                </div>
-
-                <Input 
-                  placeholder="Description (optional)" 
-                  value={formData.description} 
-                  onChange={e => setFormData({...formData, description: e.target.value})} 
-                />
-
-                <div className="flex gap-3 pt-4">
-                  <Button type="submit" className="flex-1">
-                    {editingItem ? 'Update Item' : 'Create Item'}
-                  </Button>
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </form>
+        <Card>
+          <CardContent className="p-8">
+            <h3 className="font-semibold mb-4">Quick Actions</h3>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="outline" onClick={() => window.location.href = '/menu'}>Manage Menu</Button>
+              <Button variant="outline">View Inventory</Button>
+              <Button variant="outline">Staff Schedule</Button>
             </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/Users.tsx">
-import { useState, useEffect } from 'react';
-import api from '@/lib/api';
-import type { User } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Plus, Edit } from 'lucide-react';
-
-export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
-    try {
-      const res = await api.get('/users');
-      setUsers(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div className="p-8">Loading users...</div>;
-
-  return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Staff Management</h1>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" /> Add New Staff
-        </Button>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-zinc-50">
-              <th className="text-left p-4">Full Name</th>
-              <th className="text-left p-4">Email</th>
-              <th className="text-left p-4">Role</th>
-              <th className="text-left p-4">Employee ID</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-right p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-b hover:bg-zinc-50">
-                <td className="p-4 font-medium">{user.fullName}</td>
-                <td className="p-4 text-zinc-600">{user.email}</td>
-                <td className="p-4">
-                  <span className="px-3 py-1 bg-violet-100 text-violet-700 rounded-full text-xs font-medium">
-                    {user.role}
-                  </span>
-                </td>
-                <td className="p-4 text-zinc-600">{user.employeeId || '-'}</td>
-                <td className="p-4">
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                    user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {user.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="p-4 text-right">
-                  <Button variant="outline" size="sm">
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
-}
-</file>
-
-<file path="src/types/index.ts">
-export interface MenuItem {
-  id: number;
-  name: string;
-  description?: string;
-  category: string;
-  price: number;
-  imageUrl? : string;
-  imageData?: string;
-  modifiers?: string[];
-  availableFrom?: string;
-  availableUntil?: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-export interface User {
-  id: number;
-  fullName: string;
-  email: string;
-  phoneNumber?: string;
-  employeeId?: string;
-  role: 'Admin' | 'Manager' | 'Cashier';
-  isActive: boolean;
-  createdAt: string;
-  lastLoginAt?: string;
-}
-
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  userId: number;
-  fullName: string;
-  token: string;
-  role: string;
-  expiresAt: string;
 }
 </file>
 
@@ -2284,6 +1263,1667 @@ export default defineConfig({
     },
   },
 })
+</file>
+
+<file path="package.json">
+{
+  "name": "streetpos-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.2.8",
+    "@fontsource-variable/geist": "^5.2.9",
+    "@fontsource-variable/instrument-sans": "^5.2.8",
+    "@fontsource-variable/public-sans": "^5.2.7",
+    "@tailwindcss/vite": "^4.3.2",
+    "autoprefixer": "^10.5.2",
+    "axios": "^1.18.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.23.0",
+    "postcss": "^8.5.16",
+    "radix-ui": "^1.6.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1",
+    "shadcn": "^4.12.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.2",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "oxlint": "^1.69.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.0"
+  }
+}
+</file>
+
+<file path="src/components/layout.tsx">
+import { useEffect, useState } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { 
+  LayoutDashboard, 
+  Coffee, 
+  Users, 
+  BarChart3, 
+  UserCog, 
+  LogOut 
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  roles: string[];
+}
+
+const navItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['Admin', 'Manager', 'Cashier'] },
+  { label: 'POS Terminal', href: '/cashier', icon: Coffee, roles: ['Admin', 'Manager', 'Cashier'] },
+  { label: 'Menu Management', href: '/menu', icon: Coffee, roles: ['Admin', 'Manager'] },
+  { label: 'Manager Hub', href: '/manager', icon: BarChart3, roles: ['Admin', 'Manager'] },
+  { label: 'Staff Management', href: '/users', icon: Users, roles: ['Admin'] },
+];
+
+export default function Layout() {
+  const [userRole, setUserRole] = useState<string>('');
+  const [userName, setUserName] = useState<string>('');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const role = localStorage.getItem('userRole') || '';
+    const name = localStorage.getItem('fullName') || 'User';
+    setUserRole(role);
+    setUserName(name);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.clear();
+    navigate('/login');
+  };
+
+  const filteredNavItems = navItems.filter(item => 
+    item.roles.includes(userRole)
+  );
+
+  return (
+    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">
+      {/* Sidebar */}
+      <div className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col">
+        <div className="p-8 border-b border-zinc-200 dark:border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-violet-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl">
+              ☕
+            </div>
+            <div>
+              <h1 className="font-semibold text-2xl tracking-tight">StreetPOS</h1>
+              <p className="text-xs text-zinc-500">Café Management</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 p-6">
+          <nav className="space-y-2">
+            {filteredNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.href;
+              
+              return (
+                <Link
+                  key={item.href}
+                  to={item.href}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all",
+                    isActive 
+                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" 
+                      : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* User Footer */}
+        <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 mt-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 bg-zinc-200 dark:bg-zinc-700 rounded-full flex items-center justify-center text-lg">
+              <UserCog className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{userName}</p>
+              <p className="text-xs text-zinc-500 capitalize">{userRole}</p>
+            </div>
+          </div>
+
+          <Button 
+            variant="outline" 
+            className="w-full justify-start gap-2"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto">
+        <main className="p-10">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/components/login-form.tsx">
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
+export function LoginForm() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { token, fullName, role } = response.data;
+
+      localStorage.setItem('token', token);
+      localStorage.setItem('fullName', fullName);
+      localStorage.setItem('userRole', role);
+
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Invalid credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50 dark:from-zinc-950 dark:to-zinc-900 p-4">
+      <div className="w-full max-w-[960px] grid md:grid-cols-2 bg-white dark:bg-zinc-900 rounded-3xl shadow-xl overflow-hidden">
+        {/* Form Side */}
+        <div className="p-10 md:p-16 flex flex-col justify-center">
+          <div className="flex items-center gap-3 mb-10">
+            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center text-white text-4xl">☕</div>
+            <div>
+              <h1 className="text-4xl font-bold tracking-tighter">StreetPOS</h1>
+              <p className="text-sm text-amber-600">Café Operations</p>
+            </div>
+          </div>
+
+          <h2 className="text-3xl font-semibold mb-2">Welcome back</h2>
+          <p className="text-zinc-600 dark:text-zinc-400 mb-8">Sign in to manage your café</p>
+
+          {error && <div className="mb-6 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 p-4 rounded-2xl text-sm">{error}</div>}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="text-sm font-medium block mb-2">Email Address</label>
+              <Input 
+                type="email" 
+                placeholder="admin@streetpos.com" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)}
+                required 
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-2">Password</label>
+              <Input 
+                type="password" 
+                placeholder="••••••••" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)}
+                required 
+              />
+            </div>
+
+            <Button type="submit" className="w-full h-12 text-base" disabled={loading}>
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </form>
+        </div>
+
+        {/* Visual Side */}
+        <div className="hidden md:flex bg-gradient-to-br from-amber-600 via-orange-600 to-red-600 items-center justify-center relative overflow-hidden">
+          <div className="text-white text-center z-10">
+            <div className="text-7xl mb-6">☕</div>
+            <h3 className="text-4xl font-bold tracking-tight mb-3">Run your café</h3>
+            <p className="max-w-xs mx-auto opacity-90">Efficiently. Beautifully. Profitably.</p>
+          </div>
+          <div className="absolute inset-0 bg-[radial-gradient(#ffffff33_1px,transparent_1px)] [background-size:20px_20px]"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/lib/api.ts">
+import axios from 'axios';
+
+const API_BASE = 'http://localhost:5032/api';
+
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.clear();
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+</file>
+
+<file path="src/pages/Dashboard.tsx">
+import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import { Coffee, Users, TrendingUp, Clock } from 'lucide-react';
+
+interface Stat {
+  title: string;
+  value: number | string;
+  icon: React.ElementType;
+  change?: string;
+}
+
+export default function Dashboard() {
+  const [stats, setStats] = useState<Stat[]>([
+    { title: "Menu Items", value: 0, icon: Coffee },
+    { title: "Staff", value: 0, icon: Users },
+    { title: "Today's Sales", value: "$1,284", icon: TrendingUp, change: "+12%" },
+    { title: "Open Orders", value: 7, icon: Clock },
+  ]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [menuRes, usersRes] = await Promise.all([
+          api.get('/menu'),
+          api.get('/users')
+        ]);
+        setStats(prev => prev.map((s, i) => {
+          if (i === 0) return { ...s, value: menuRes.data.length };
+          if (i === 1) return { ...s, value: usersRes.data.length };
+          return s;
+        }));
+      } catch (e) { console.error(e); }
+    };
+    fetchData();
+  }, []);
+
+  return (
+    <div>
+      <div className="flex justify-between items-end mb-10">
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight">Good afternoon, Team</h1>
+          <p className="text-zinc-600 dark:text-zinc-400 mt-1">Here's what's happening at StreetPOS today</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, i) => (
+          <div key={i} className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <stat.icon className="w-9 h-9 text-amber-600" />
+              {stat.change && <span className="text-emerald-600 text-sm font-medium">{stat.change}</span>}
+            </div>
+            <p className="text-5xl font-semibold mt-8 mb-1">{stat.value}</p>
+            <p className="text-sm text-zinc-500">{stat.title}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Recent Activity */}
+      <div className="mt-12">
+        <h2 className="text-xl font-semibold mb-6">Recent Activity</h2>
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
+          <p className="text-zinc-500 italic">Mock recent transactions would appear here in a full implementation.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="src/App.tsx">
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { LoginForm } from "@/components/login-form";
+import Layout from "@/components/layout";
+import Dashboard from "@/pages/Dashboard";
+import MenuPage from "@/pages/Menu";
+import UsersPage from "@/pages/Users";
+import ManagerPage from "@/pages/Manager";
+import CashierPage from "@/pages/Cashier";
+import {Toaster} from "sonner";
+
+function ProtectedRoute({ 
+  children, 
+  allowedRoles 
+}: { 
+  children: React.ReactNode; 
+  allowedRoles?: string[]; 
+}) {
+  const token = localStorage.getItem('token');
+  const userRole = localStorage.getItem('userRole');
+
+  if (!token) return <Navigate to="/login" replace />;
+
+  if (allowedRoles && !allowedRoles.includes(userRole || '')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+
+    <Toaster position="top-center" richColors closeButton />
+      <Routes>
+        <Route path="/login" element={<LoginForm />} />
+        
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          
+          {/* Manager Routes */}
+          <Route 
+            path="/manager" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                <ManagerPage />
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Cashier Routes */}
+          <Route 
+            path="/cashier" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager', 'Cashier']}>
+                <CashierPage />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Existing Admin/Manager Pages */}
+          <Route 
+            path="/menu" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin', 'Manager']}>
+                <MenuPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/users" 
+            element={
+              <ProtectedRoute allowedRoles={['Admin']}>
+                <UsersPage />
+              </ProtectedRoute>
+            } 
+          />
+        </Route>
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
+</file>
+
+<file path="src/pages/Menu.tsx">
+import { useState, useEffect } from 'react';
+import api from '@/lib/api';
+import type { MenuItem } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Plus, Edit, Trash2, Search, Upload, Image as ImageIcon } from 'lucide-react';
+
+export default function MenuPage() {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+  const [showModal, setShowModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    category: '',
+    price: 0,
+    availableFrom: '',
+    availableUntil: '',
+  });
+
+  // Predefined categories
+  const categories = ['Coffee', 'Non-Coffee', 'Tea', 'Pastry', 'Breakfast', 'Sandwich', 'Dessert', 'Other'];
+
+  useEffect(() => {
+    fetchMenu();
+  }, []);
+
+  useEffect(() => {
+    let result = [...menuItems];
+    if (searchTerm) {
+      result = result.filter(item => 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.category.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    if (selectedCategory !== 'All') {
+      result = result.filter(item => item.category === selectedCategory);
+    }
+    setFilteredItems(result);
+  }, [menuItems, searchTerm, selectedCategory]);
+
+  const fetchMenu = async () => {
+    try {
+      const res = await api.get('/menu');
+      setMenuItems(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openModal = (item?: MenuItem) => {
+    if (item) {
+      setEditingItem(item);
+      setFormData({
+        name: item.name,
+        description: item.description || '',
+        category: item.category,
+        price: item.price,
+        availableFrom: item.availableFrom ? item.availableFrom.slice(0, 5) : '',
+        availableUntil: item.availableUntil ? item.availableUntil.slice(0, 5) : '',
+      });
+      setImagePreview(item.imageUrl || null);
+    } else {
+      setEditingItem(null);
+      setFormData({ 
+        name: '', 
+        description: '', 
+        category: '', 
+        price: 0, 
+        availableFrom: '', 
+        availableUntil: '' 
+      });
+      setImagePreview(null);
+    }
+    setSelectedFile(null);
+    setShowModal(true);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const form = new FormData();
+      form.append('name', formData.name);
+      form.append('description', formData.description || '');
+      form.append('category', formData.category);
+      form.append('price', formData.price.toString());
+      
+      if (formData.availableFrom) form.append('availableFrom', formData.availableFrom);
+      if (formData.availableUntil) form.append('availableUntil', formData.availableUntil);
+
+      if (selectedFile) {
+        form.append('imageFile', selectedFile);
+      }
+
+      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
+
+      if (editingItem) {
+        await api.put(`/menu/${editingItem.id}`, form, config);
+      } else {
+        await api.post('/menu', form, config);
+      }
+
+      fetchMenu();
+      setShowModal(false);
+      setImagePreview(null);
+      setSelectedFile(null);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to save item');
+    }
+  };
+
+  const handleDeactivate = async (id: number) => {
+    if (!confirm('Deactivate this item?')) return;
+    try {
+      await api.delete(`/menu/${id}`);
+      fetchMenu();
+    } catch (err) {
+      alert('Failed to deactivate');
+    }
+  };
+
+  const getImageUrl = (item: MenuItem): string | null => {
+    if (!item.imageUrl) return null;
+    if (item.imageUrl.startsWith('http')) return item.imageUrl;
+    return `http://localhost:5032${item.imageUrl.startsWith('/') ? '' : '/'}${item.imageUrl}`;
+  };
+
+  if (loading) return <div className="p-8 text-center">Loading menu items...</div>;
+
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-4xl font-bold tracking-tight">Menu Management</h1>
+        <Button onClick={() => openModal()}>
+          <Plus className="w-4 h-4 mr-2" /> Add New Item
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-3.5 w-5 h-5 text-zinc-400" />
+          <Input 
+            placeholder="Search menu items..." 
+            className="pl-11"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <select 
+          value={selectedCategory} 
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-4 py-3 rounded-2xl border border-input bg-background text-sm"
+        >
+          <option value="All">All Categories</option>
+          {categories.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Menu Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredItems.map(item => (
+          <div key={item.id} className="bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-sm border border-zinc-100 dark:border-zinc-800">
+            <div className="h-48 bg-zinc-100 dark:bg-zinc-800 relative">
+              {item.imageUrl ? (
+                <img 
+                  src={getImageUrl(item)!} 
+                  alt={item.name} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-6xl opacity-30">
+                  <ImageIcon className="w-20 h-20 text-zinc-400" />
+                </div>
+              )}
+
+              <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                {item.isActive ? 'Active' : 'Inactive'}
+              </div>
+            </div>
+
+            <div className="p-6">
+              <h3 className="font-semibold text-lg">{item.name}</h3>
+              <p className="text-sm text-zinc-500 mt-1">{item.category}</p>
+              <p className="text-2xl font-bold mt-3">₱{item.price.toFixed(2)}</p>
+
+              {item.availableFrom && (
+                <p className="text-xs text-zinc-500 mt-2">
+                  {item.availableFrom} - {item.availableUntil}
+                </p>
+              )}
+
+              <div className="flex gap-2 mt-6">
+                <Button variant="outline" size="sm" onClick={() => openModal(item)}>
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleDeactivate(item.id)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-auto">
+            <div className="p-8">
+              <h2 className="text-2xl font-semibold mb-6">
+                {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
+              </h2>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Image Upload */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Item Image</label>
+                  <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-6 text-center">
+                    {imagePreview ? (
+                      <img src={imagePreview} alt="Preview" className="mx-auto max-h-48 rounded-xl object-cover" />
+                    ) : (
+                      <Upload className="w-12 h-12 mx-auto text-zinc-400" />
+                    )}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleImageChange}
+                      className="mt-4 block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
+                    />
+                  </div>
+                </div>
+
+                <Input 
+                  placeholder="Item Name" 
+                  value={formData.name} 
+                  onChange={e => setFormData({...formData, name: e.target.value})} 
+                  required 
+                />
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Category</label>
+                  <select
+                    value={formData.category}
+                    onChange={e => setFormData({...formData, category: e.target.value})}
+                    className="w-full p-3 rounded-2xl border border-input bg-background"
+                    required
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Price (₱)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-3.5 text-zinc-500 font-medium">₱</span>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0.00" 
+                      value={formData.price} 
+                      onChange={e => setFormData({...formData, price: parseFloat(e.target.value) || 0})} 
+                      className="pl-8"
+                      required 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Available From</label>
+                    <Input 
+                      type="time" 
+                      value={formData.availableFrom} 
+                      onChange={e => setFormData({...formData, availableFrom: e.target.value})} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Available Until</label>
+                    <Input 
+                      type="time" 
+                      value={formData.availableUntil} 
+                      onChange={e => setFormData({...formData, availableUntil: e.target.value})} 
+                    />
+                  </div>
+                </div>
+
+                <Input 
+                  placeholder="Description (optional)" 
+                  value={formData.description} 
+                  onChange={e => setFormData({...formData, description: e.target.value})} 
+                />
+
+                <div className="flex gap-3 pt-4">
+                  <Button type="submit" className="flex-1">
+                    {editingItem ? 'Update Item' : 'Create Item'}
+                  </Button>
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="src/pages/Users.tsx">
+import { useState, useEffect } from 'react';
+import api from '@/lib/api';
+import type { User } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+
+export default function UsersPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    phoneNumber: '',
+    role: 'Cashier' as 'Admin' | 'Manager' | 'Cashier',
+    password: '',
+  });
+
+  const [errors, setErrors] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+  });
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/users');
+      setUsers(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const validateField = (field: string, value: string) => {
+    const newErrors = { ...errors };
+
+    if (field === 'fullName') {
+      newErrors.fullName = value.trim() ? '' : 'Full name is required';
+    }
+
+    if (field === 'email') {
+      if (!value.trim()) newErrors.email = 'Email is required';
+      else if (!/\S+@\S+\.\S+/.test(value)) newErrors.email = 'Please enter a valid email';
+      else newErrors.email = '';
+    }
+
+    if (field === 'password' && !editingUser) {
+      if (!value) newErrors.password = 'Password is required';
+      else if (value.length < 8) newErrors.password = 'Password must be at least 8 characters';
+      else if (!/[a-z]/.test(value)) newErrors.password = 'Password must contain at least one lowercase letter';
+      else newErrors.password = '';
+    }
+
+    setErrors(newErrors);
+  };
+
+  const openModal = (user?: User) => {
+    setErrors({ fullName: '', email: '', password: '' });
+    if (user) {
+      setEditingUser(user);
+      setFormData({
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber || '',
+        role: user.role,
+        password: '',
+      });
+    } else {
+      setEditingUser(null);
+      setFormData({
+        fullName: '',
+        email: '',
+        phoneNumber: '',
+        role: 'Cashier',
+        password: '',
+      });
+    }
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.fullName.trim() || !formData.email.trim()) return;
+    if (!editingUser && (!formData.password || formData.password.length < 8)) return;
+
+    try {
+      if (!editingUser) {
+        await api.post('/users', {
+          fullName: formData.fullName,
+          email: formData.email,
+          phoneNumber: formData.phoneNumber || null,
+          password: formData.password,
+          role: formData.role
+        });
+        toast.success('New staff account created successfully!');
+      } else {
+        await api.put(`/users/${editingUser.id}`, {
+          fullName: formData.fullName,
+          phoneNumber: formData.phoneNumber || null,
+          role: formData.role,
+          isActive: true
+        });
+        toast.success('Staff information updated successfully!');
+      }
+
+      setShowModal(false);
+      fetchUsers();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 
+                  err.response?.data?.error || 
+                  "Failed to save staff. Please check your input.";
+      toast.error(msg);
+    }
+  };
+
+  const handleDeactivate = async (id: number) => {
+    if (!confirm('Are you sure you want to deactivate this staff member?')) return;
+
+    try {
+      await api.put(`/users/${id}/deactivate`);
+      toast.success('Staff member has been deactivated.');
+      fetchUsers();
+    } catch (err: any) {
+      toast.error('Failed to deactivate staff member.');
+    }
+  };
+
+  if (loading) return <div className="p-8">Loading staff...</div>;
+
+  return (
+    <div className="p-8 relative">
+      <Toaster position="top-center" richColors closeButton />
+
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-4xl font-bold tracking-tight">Staff Management</h1>
+        <Button onClick={() => openModal()}>
+          <Plus className="w-4 h-4 mr-2" /> Add New Staff
+        </Button>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b bg-zinc-50 dark:bg-zinc-800">
+              <th className="text-left p-4">Employee ID</th>
+              <th className="text-left p-4">Full Name</th>
+              <th className="text-left p-4">Email</th>
+              <th className="text-left p-4">Role</th>
+              <th className="text-left p-4">Status</th>
+              <th className="text-right p-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id} className="border-b hover:bg-zinc-50 dark:hover:bg-zinc-800">
+                <td className="p-4 font-mono font-medium">{user.employeeId || '-'}</td>
+                <td className="p-4 font-medium">{user.fullName}</td>
+                <td className="p-4 text-zinc-600">{user.email}</td>
+                <td className="p-4">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    user.role === 'Admin' ? 'bg-red-100 text-red-700' :
+                    user.role === 'Manager' ? 'bg-blue-100 text-blue-700' : 
+                    'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {user.role}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                    user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {user.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className="p-4 text-right flex gap-2 justify-end">
+                  <Button variant="outline" size="sm" onClick={() => openModal(user)}>
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  {user.isActive && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-red-600 hover:bg-red-50"
+                      onClick={() => handleDeactivate(user.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
+            <div className="p-8">
+              <h2 className="text-2xl font-semibold mb-6">
+                {editingUser ? 'Edit Staff Member' : 'Add New Staff'}
+              </h2>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div>
+                  <Input
+                    placeholder="Full Name"
+                    value={formData.fullName}
+                    onChange={(e) => {
+                      setFormData({ ...formData, fullName: e.target.value });
+                      validateField('fullName', e.target.value);
+                    }}
+                    className={errors.fullName ? "border-red-500" : ""}
+                    required
+                  />
+                  {errors.fullName && <p className="text-red-500 text-sm mt-1">{errors.fullName}</p>}
+                </div>
+
+                <div>
+                  <Input
+                    type="email"
+                    placeholder="Email Address"
+                    value={formData.email}
+                    onChange={(e) => {
+                      setFormData({ ...formData, email: e.target.value });
+                      validateField('email', e.target.value);
+                    }}
+                    className={errors.email ? "border-red-500" : ""}
+                    required
+                    disabled={!!editingUser}
+                  />
+                  {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                </div>
+
+                <Input
+                  placeholder="Phone Number (optional)"
+                  value={formData.phoneNumber}
+                  onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                />
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Role</label>
+                  <select
+                    className="w-full p-3 rounded-2xl border border-input bg-background"
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                  >
+                    <option value="Cashier">Cashier</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Admin">Admin</option>
+                  </select>
+                </div>
+
+                {!editingUser && (
+                  <div>
+                    <Input
+                      type="password"
+                      placeholder="Password (min 8 chars, 1 lowercase)"
+                      value={formData.password}
+                      onChange={(e) => {
+                        setFormData({ ...formData, password: e.target.value });
+                        validateField('password', e.target.value);
+                      }}
+                      className={errors.password ? "border-red-500" : ""}
+                      required
+                    />
+                    {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <Button type="submit" className="flex-1">
+                    {editingUser ? 'Update Staff' : 'Create Staff'}
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="flex-1" 
+                    onClick={() => setShowModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="src/types/index.ts">
+export interface ModifierOption {
+  id: number;
+  name: string;
+  priceAdjustment: number;
+}
+
+export interface ModifierGroup {
+  id: number;
+  name: string;
+  isRequired: boolean;
+  displayOrder: number;
+  options: ModifierOption[];
+}
+
+export interface MenuItem {
+  id: number;
+  name: string;
+  description?: string;
+  category: string;
+  price: number;
+  imageUrl?: string;
+  displayOrder: number;
+  isActive: boolean;
+  availableFrom?: string;
+  availableUntil?: string;
+  modifierGroups: ModifierGroup[];   // ← New
+}
+
+export interface OrderItemRequest {
+  menuItemId: number;
+  quantity: number;
+  selectedModifierOptionIds: number[];   // ← New
+  itemNotes?: string;
+}
+
+export interface CartItem extends MenuItem {
+  quantity: number;
+  selectedModifierOptionIds: number[];
+  note?: string;
+  itemTotal: number;
+}
+
+export interface User {
+  id: number;
+  employeeId?: string;
+  fullName: string;
+  email: string;
+  phoneNumber?: string;
+  role: 'Admin' | 'Manager' | 'Cashier';
+  isActive: boolean;
+}
+</file>
+
+<file path="src/pages/Cashier.tsx">
+import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import type { MenuItem, CartItem, ModifierGroup } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { CreditCard, Loader2, X, RefreshCw, Eye } from 'lucide-react';
+
+type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Card';
+
+export default function CashierPage() {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [myOrders, setMyOrders] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // Modals
+  const [showModifiersModal, setShowModifiersModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [currentModifiers, setCurrentModifiers] = useState<ModifierGroup[]>([]);
+  const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
+  const [customNote, setCustomNote] = useState('');
+
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('Cash');
+  const [amountTendered, setAmountTendered] = useState('');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const [showOrderDetail, setShowOrderDetail] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+
+  const fetchMenu = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/menu');
+      setMenuItems(res.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMyOrders = async () => {
+    setOrdersLoading(true);
+    try {
+      const res = await api.get('/orders/my-orders');
+      let ordersData = res.data;
+
+      if (Array.isArray(ordersData)) setMyOrders(ordersData);
+      else if (ordersData?.orders && Array.isArray(ordersData.orders)) setMyOrders(ordersData.orders);
+      else if (ordersData?.data && Array.isArray(ordersData.data)) setMyOrders(ordersData.data);
+      else setMyOrders([]);
+    } catch (err) {
+      console.error(err);
+      setMyOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const getOrderTotal = (order: any): number => {
+    if (!order) return 0;
+    const candidates = [order.total, order.Total, order.grandTotal, order.amount, order.subtotal];
+    for (const val of candidates) {
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') {
+        const parsed = parseFloat(val);
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+    return 0;
+  };
+
+  const getItemName = (item: any, allMenuItems: MenuItem[]) => {
+    if (item.menuItemName) return item.menuItemName;
+    if (item.name) return item.name;
+
+    // Try to match by ID
+    const menuItem = allMenuItems.find(m => 
+      m.id === item.menuItemId || 
+      m.id === item.MenuItemId || 
+      m.id === item.menuItem?.id
+    );
+    return menuItem?.name || `Item #${item.menuItemId || item.id || 'Unknown'}`;
+  };
+
+  const openOrderDetail = (order: any) => {
+    setSelectedOrder(order);
+    setShowOrderDetail(true);
+  };
+
+  useEffect(() => {
+    fetchMenu();
+    fetchMyOrders();
+  }, []);
+
+  const openModifiersModal = async (item: MenuItem) => {
+    setSelectedItem(item);
+    setSelectedOptionIds([]);
+    setCustomNote('');
+    try {
+      const res = await api.get(`/menu/${item.id}`);
+      setCurrentModifiers(res.data?.modifierGroups || []);
+    } catch (e) {
+      setCurrentModifiers([]);
+    }
+    setShowModifiersModal(true);
+  };
+
+  const toggleOption = (optionId: number) => {
+    setSelectedOptionIds(prev =>
+      prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+    );
+  };
+
+  const calculatePrice = (basePrice: number) => {
+    let extra = 0;
+    currentModifiers.forEach(group => {
+      group.options.forEach(option => {
+        if (selectedOptionIds.includes(option.id)) extra += option.priceAdjustment || 0;
+      });
+    });
+    return basePrice + extra;
+  };
+
+  const addToCart = () => {
+    if (!selectedItem) return;
+    const finalPrice = calculatePrice(selectedItem.price);
+    const cartItem: CartItem = {
+      ...selectedItem,
+      quantity: 1,
+      selectedModifierOptionIds: [...selectedOptionIds],
+      note: customNote.trim(),
+      itemTotal: finalPrice
+    };
+    setCart(prev => [...prev, cartItem]);
+    setTotal(prev => prev + finalPrice);
+    setShowModifiersModal(false);
+  };
+
+  const removeFromCart = (index: number) => {
+    const item = cart[index];
+    setCart(prev => prev.filter((_, i) => i !== index));
+    setTotal(prev => prev - item.itemTotal);
+  };
+
+  const openCheckout = () => {
+    if (cart.length === 0) return;
+    setAmountTendered('');
+    setSelectedPaymentMethod('Cash');
+    setShowCheckoutModal(true);
+  };
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+    setCheckoutLoading(true);
+
+    const orderPayload = {
+      tableNumber: "T1",
+      customerNotes: "",
+      items: cart.map(item => ({
+        menuItemId: item.id,
+        quantity: item.quantity,
+        selectedModifierOptionIds: item.selectedModifierOptionIds,
+        itemNotes: item.note || ""
+      }))
+    };
+
+    try {
+      const createRes = await api.post('/orders', orderPayload);
+      const orderId = createRes.data?.id || createRes.data?.order?.id;
+
+      const checkoutPayload = {
+        orderId,
+        paymentMethod: selectedPaymentMethod,
+        amountTendered: selectedPaymentMethod === 'Cash' ? parseFloat(amountTendered) || undefined : undefined,
+        transactionId: selectedPaymentMethod !== 'Cash' ? `TX-${Date.now()}` : undefined
+      };
+
+      await api.post('/orders/checkout', checkoutPayload);
+      alert("✅ Order completed successfully!");
+      setCart([]);
+      setTotal(0);
+      setShowCheckoutModal(false);
+      fetchMyOrders();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Checkout failed.");
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
+  const filteredMenu = menuItems.filter(item =>
+    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const changeDue = selectedPaymentMethod === 'Cash' && amountTendered 
+    ? Math.max(0, parseFloat(amountTendered) - total) 
+    : 0;
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-[70vh]"><Loader2 className="w-10 h-10 animate-spin" /></div>;
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-[calc(100vh-120px)]">
+      {/* Menu Section */}
+      <div className="lg:col-span-2 bg-white dark:bg-zinc-900 rounded-3xl p-6 overflow-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">POS Terminal</h1>
+          <Input 
+            placeholder="Search menu..." 
+            className="max-w-xs"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {filteredMenu.map(item => (
+            <div 
+              key={item.id}
+              className="border border-zinc-200 dark:border-zinc-700 rounded-3xl p-4 cursor-pointer hover:border-amber-600 transition-all active:scale-[0.985]"
+              onClick={() => openModifiersModal(item)}
+            >
+              <div className="h-40 bg-zinc-100 dark:bg-zinc-800 rounded-2xl mb-4 overflow-hidden">
+                {item.imageUrl && <img src={`http://localhost:5032${item.imageUrl}`} alt={item.name} className="w-full h-full object-cover" />}
+              </div>
+              <h3 className="font-semibold">{item.name}</h3>
+              <p className="text-sm text-zinc-500">₱{item.price}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Sidebar */}
+      <div className="space-y-6">
+        {/* Cart */}
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col h-1/2">
+          <h2 className="text-2xl font-semibold mb-6">Current Order</h2>
+          <div className="flex-1 overflow-auto space-y-4 pr-2">
+            {cart.length === 0 ? (
+              <div className="text-center py-20 text-zinc-500">Your cart is empty.<br />Tap items to add.</div>
+            ) : (
+              cart.map((item, idx) => (
+                <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl flex justify-between items-center">
+                  <div>
+                    <p className="font-medium">{item.name}</p>
+                    {item.note && <p className="text-xs text-zinc-500 mt-1">Note: {item.note}</p>}
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <p className="font-semibold">₱{item.itemTotal.toFixed(2)}</p>
+                    <Button variant="ghost" size="sm" className="text-red-500" onClick={() => removeFromCart(idx)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="border-t pt-6 mt-auto">
+            <div className="flex justify-between text-4xl font-bold mb-6">
+              <span className="text-xl text-zinc-500">Total</span>
+              <span>₱{total.toFixed(2)}</span>
+            </div>
+            <Button onClick={openCheckout} className="w-full py-8 text-lg font-semibold" disabled={cart.length === 0}>
+              <CreditCard className="mr-3 w-6 h-6" /> Proceed to Checkout
+            </Button>
+          </div>
+        </div>
+
+        {/* Recent Orders */}
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 flex flex-col h-1/2">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-semibold">Recent Orders</h2>
+            <Button variant="ghost" size="sm" onClick={fetchMyOrders} disabled={ordersLoading}>
+              <RefreshCw className={`w-4 h-4 ${ordersLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+          
+          <div className="flex-1 overflow-auto space-y-3 pr-2">
+            {ordersLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>
+            ) : myOrders.length === 0 ? (
+              <div className="text-center py-12 text-zinc-500">No orders yet.</div>
+            ) : (
+              myOrders.slice(0, 6).map((order) => (
+                <div 
+                  key={order.id} 
+                  className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl text-sm hover:bg-amber-50 transition-all cursor-pointer"
+                  onClick={() => openOrderDetail(order)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-mono font-medium">{order.orderNumber || `ORD-${order.id}`}</div>
+                      <div className="text-xs text-zinc-500">
+                        {new Date(order.createdAt || order.CreatedAt).toLocaleString([], { 
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                        })}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">₱{getOrderTotal(order).toFixed(2)}</div>
+                      <div className={`text-xs capitalize mt-1 px-2 py-0.5 rounded-full inline-block ${
+                        (order.status === 'Completed' || order.Status === 'Completed') 
+                          ? 'bg-emerald-100 text-emerald-700' 
+                          : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {order.status || order.Status || 'Pending'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-zinc-500 mt-2">
+                    <Eye className="w-3 h-3" /> Click to view details
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modifiers Modal */}
+      {showModifiersModal && selectedItem && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md max-h-[90vh] overflow-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold">{selectedItem.name}</h2>
+                  <p className="text-zinc-500">Base: ₱{selectedItem.price.toFixed(2)}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowModifiersModal(false)}>
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+
+              <div className="space-y-8">
+                {currentModifiers.map(group => (
+                  <div key={group.id}>
+                    <h3 className="font-medium mb-3">{group.name}</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {group.options.map(option => (
+                        <label key={option.id} className="flex items-center gap-3 border rounded-2xl p-4 cursor-pointer hover:bg-amber-50">
+                          <input 
+                            type="checkbox" 
+                            checked={selectedOptionIds.includes(option.id)}
+                            onChange={() => toggleOption(option.id)}
+                            className="accent-amber-600"
+                          />
+                          <div>
+                            <div>{option.name}</div>
+                            {option.priceAdjustment > 0 && <div className="text-xs text-emerald-600">+₱{option.priceAdjustment}</div>}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8">
+                <label className="block text-sm font-medium mb-2">Special Requests</label>
+                <Input 
+                  placeholder="No ice, extra sugar, etc."
+                  value={customNote}
+                  onChange={(e) => setCustomNote(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-8">
+                <Button onClick={addToCart} className="flex-1">
+                  Add to Order - ₱{calculatePrice(selectedItem.price).toFixed(2)}
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => setShowModifiersModal(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Modal */}
+      {showCheckoutModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
+            <div className="p-8">
+              <h2 className="text-2xl font-semibold mb-6">Complete Payment</h2>
+              <div className="text-4xl font-bold mb-8 text-center">₱{total.toFixed(2)}</div>
+
+              <div className="space-y-4 mb-8">
+                {(['Cash', 'GCash', 'Maya', 'Card'] as PaymentMethod[]).map(method => (
+                  <Button
+                    key={method}
+                    variant={selectedPaymentMethod === method ? "default" : "outline"}
+                    className="w-full justify-start text-left h-14"
+                    onClick={() => setSelectedPaymentMethod(method)}
+                  >
+                    {method === 'Cash' ? <CreditCard className="mr-3" /> : <CreditCard className="mr-3" />}
+                    {method}
+                  </Button>
+                ))}
+              </div>
+
+              {selectedPaymentMethod === 'Cash' && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium mb-2">Amount Tendered</label>
+                  <Input
+                    type="number"
+                    placeholder="0.00"
+                    value={amountTendered}
+                    onChange={(e) => setAmountTendered(e.target.value)}
+                    className="text-2xl py-6"
+                  />
+                  {changeDue > 0 && <p className="text-emerald-600 mt-2 font-medium">Change: ₱{changeDue.toFixed(2)}</p>}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <Button onClick={handleCheckout} disabled={checkoutLoading || (selectedPaymentMethod === 'Cash' && !amountTendered)} className="flex-1 py-7 text-lg">
+                  {checkoutLoading && <Loader2 className="animate-spin mr-2" />}
+                  Confirm Payment
+                </Button>
+                <Button variant="outline" className="flex-1 py-7" onClick={() => setShowCheckoutModal(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Detail Modal */}
+      {showOrderDetail && selectedOrder && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[90vh] overflow-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <h2 className="text-2xl font-semibold">Order Details</h2>
+                  <p className="font-mono text-sm text-zinc-500">{selectedOrder.orderNumber || `ORD-${selectedOrder.id}`}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowOrderDetail(false)}>
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <p className="text-sm text-zinc-500">Status</p>
+                  <p className="font-medium capitalize">{selectedOrder.status || selectedOrder.Status || 'Pending'}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-zinc-500">Total</p>
+                  <p className="text-3xl font-bold">₱{getOrderTotal(selectedOrder).toFixed(2)}</p>
+                </div>
+
+                {selectedOrder.paymentMethod && (
+                  <div>
+                    <p className="text-sm text-zinc-500">Payment Method</p>
+                    <p className="font-medium">{selectedOrder.paymentMethod}</p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm text-zinc-500 mb-3">Items</p>
+                  <div className="space-y-3">
+                    {(selectedOrder.items || selectedOrder.orderItems || selectedOrder.OrderItems || []).map((item: any, idx: number) => (
+                      <div key={idx} className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-2xl">
+                        <div className="flex justify-between">
+                          <span className="font-medium">{getItemName(item, menuItems)} × {item.quantity || 1}</span>
+                          <span>₱{(item.subtotal || item.itemTotal || 0).toFixed(2)}</span>
+                        </div>
+                        {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                          <div className="text-xs text-zinc-500 mt-1">
+                            {item.selectedModifiers.map((m: any) => m.name).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <Button className="w-full mt-8" onClick={() => setShowOrderDetail(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 </file>
 
 </files>
