@@ -1,48 +1,31 @@
-import axios from 'axios';
-import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+import api from '@/services/api';
+import { HubConnectionBuilder, LogLevel, HubConnection } from '@microsoft/signalr';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5032';
+const DASHBOARD_HUB_URL = `${BASE_URL}/hubs/dashboard`;
 
 let hubConnection: HubConnection | null = null;
 
-export const connectToDashboardHub = async (onUpdate: (data: any) => void) => {
-  if (hubConnection) return hubConnection;
+export async function connectToDashboardHub(onUpdate: (data: any) => void) {
+	if (hubConnection) return;
 
-  hubConnection = new HubConnectionBuilder()
-    .withUrl(`${import.meta.env.VITE_API_BASE_URL}dashboardHub`, {
-      accessTokenFactory: () => localStorage.getItem('token') || '',
-    })
-    .withAutomaticReconnect()
-    .configureLogging(LogLevel.Information)
-    .build();
+	const connection = new HubConnectionBuilder()
+		.withUrl(DASHBOARD_HUB_URL)
+		.withAutomaticReconnect()
+		.configureLogging(LogLevel.Information)
+		.build();
 
-  hubConnection.on("ReceiveDashboardUpdate", (data) => {
-    console.log("📡 Dashboard updated in real-time:", data);
-    onUpdate(data);
-  });
+	connection.on('DashboardUpdated', (payload) => {
+		try {
+			onUpdate(payload);
+		} catch (e) {
+			console.error('Dashboard update handler error:', e);
+		}
+	});
 
-  try {
-    await hubConnection.start();
-    console.log("✅ Connected to Dashboard Hub");
-  } catch (err) {
-    console.error("❌ SignalR Connection failed:", err);
-  }
-
-  return hubConnection;
-};
+	await connection.start();
+	hubConnection = connection;
+	return connection;
+}
 
 export default api;
