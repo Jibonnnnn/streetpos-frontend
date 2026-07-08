@@ -1,65 +1,143 @@
 import { useEffect, useState } from 'react';
-import api from '@/lib/api';
-import { Coffee, Users, TrendingUp, Clock } from 'lucide-react';
+import api, { connectToDashboardHub } from '@/lib/api';
+import { Coffee, TrendingUp, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/layout';
 import { StatCard } from '@/components/common/StatCard';
-
-interface Stat {
-  title: string;
-  value: number | string;
-  icon: React.ElementType;
-  change?: string;
-}
+import { DataTable } from '@/components/common/DataTable';
+import type { DashboardResponse, TopSellingItem } from '@/types';
+import { Toaster, toast } from 'sonner';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<Stat[]>([
-    { title: "Menu Items", value: 0, icon: Coffee },
-    { title: "Staff", value: 0, icon: Users },
-    { title: "Today's Sales", value: "$1,284", icon: TrendingUp, change: "+12%" },
-    { title: "Open Orders", value: 7, icon: Clock },
-  ]);
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboard = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/dashboard');
+      setDashboard(res.data);
+    } catch (err: any) {
+      console.error('Failed to fetch dashboard:', err);
+      toast.error("Could not load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
+    fetchDashboard();
+
+    // Setup real-time SignalR connection
+    let isMounted = true;
+
+    const setupRealTime = async () => {
       try {
-        const [menuRes, usersRes] = await Promise.all([
-          api.get('/menu'),
-          api.get('/users')
-        ]);
-        setStats(prev => prev.map((s, i) => {
-          if (i === 0) return { ...s, value: menuRes.data.length };
-          if (i === 1) return { ...s, value: usersRes.data.length };
-          return s;
-        }));
-      } catch (e) { console.error(e); }
+        await connectToDashboardHub((updatedData: DashboardResponse) => {
+          if (isMounted) {
+            setDashboard(updatedData);
+            toast.success("📡 Dashboard Updated Live", {
+              description: "New data received",
+              duration: 2000,
+            });
+          }
+        });
+      } catch (err) {
+        console.error("SignalR connection failed:", err);
+      }
     };
-    fetchData();
+
+    setupRealTime();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
+  if (loading || !dashboard) {
+    return (
+      <div className="flex items-center justify-center h-[70vh]">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-zinc-500">Loading live dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const topItemsColumns = [
+    { header: "Item", accessor: "name" as const },
+    { header: "Qty Sold", accessor: "quantitySold" as const },
+    { header: "Revenue", accessor: (item: TopSellingItem) => `₱${item.revenue.toFixed(2)}` },
+  ];
+
   return (
-    <div>
+    <div className="p-8 space-y-8 max-w-screen-2xl mx-auto">
+      <Toaster position="top-center" richColors closeButton />
+
       <PageHeader 
-        title="Good afternoon, Team" 
-        description="Here's what's happening at StreetPOS today" 
+        title="Live Operations Dashboard" 
+        description="Real-time business insights • Auto-updates"
+        actions={
+          <button 
+            onClick={fetchDashboard}
+            className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-zinc-300 dark:border-zinc-700 rounded-3xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" /> Refresh Now
+          </button>
+        }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <StatCard
-            key={i}
-            title={stat.title}
-            value={stat.value}
-            icon={stat.icon}
-            change={stat.change}
-          />
-        ))}
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard 
+          title="Today's Sales" 
+          value={`₱${dashboard.todaySales.toFixed(2)}`} 
+          icon={TrendingUp}
+        />
+        <StatCard 
+          title="Orders Today" 
+          value={dashboard.ordersToday} 
+          icon={Coffee}
+        />
+        <StatCard 
+          title="Open Orders" 
+          value={dashboard.openOrders} 
+          icon={Clock}
+          changeColor="text-amber-600"
+        />
+        <StatCard 
+          title="Low Stock Items" 
+          value={dashboard.lowStockItems} 
+          icon={AlertTriangle}
+          changeColor="text-orange-600"
+        />
       </div>
 
-      {/* Recent Activity */}
-      <div className="mt-12">
-        <h2 className="text-xl font-semibold mb-6">Recent Activity</h2>
-        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 shadow-sm border border-zinc-100 dark:border-zinc-800">
-          <p className="text-zinc-500 italic">Mock recent transactions would appear here in a full implementation.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Top Selling */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            🔥 Top Selling Items <span className="text-sm font-normal text-zinc-500">(Last 7 Days)</span>
+          </h2>
+          <DataTable 
+            data={dashboard.topSellingItems} 
+            columns={topItemsColumns}
+            emptyMessage="No sales recorded yet"
+          />
+        </div>
+
+        {/* Live Summary */}
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border">
+          <h2 className="text-xl font-semibold mb-6">Live Summary</h2>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center py-3 border-b">
+              <span className="text-zinc-600 dark:text-zinc-400">Active Staff</span>
+              <span className="text-3xl font-semibold">{dashboard.activeStaff}</span>
+            </div>
+            <div className="pt-4 text-xs text-zinc-500">
+              Last updated: {new Date(dashboard.lastUpdated).toLocaleString()}
+            </div>
+          </div>
         </div>
       </div>
     </div>

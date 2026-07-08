@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import api from '@/lib/api';
-import type { MenuItem, MenuItemInventoryLinkRequest } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Plus, Edit, Trash2, ImageIcon } from 'lucide-react';
-import { Toaster, toast } from 'sonner';
-import { DataTable } from '@/components/common/DataTable';
-import { PageHeader } from '@/components/layout';
+import { useState, useEffect } from "react";
+import api from "@/lib/api";
+import type { MenuItem, MenuItemInventoryLinkRequest } from "@/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Plus, Edit, Trash2, ImageIcon } from "lucide-react";
+import { Toaster, toast } from "sonner";
+import { DataTable } from "@/components/common/DataTable";
+import { PageHeader } from "@/components/layout";
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -15,13 +15,13 @@ export default function MenuPage() {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
 
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    category: '',
+    name: "",
+    description: "",
+    category: "",
     price: 0,
     displayOrder: 0,
-    availableFrom: '',
-    availableUntil: '',
+    availableFrom: "",
+    availableUntil: "",
     inventoryLinks: [] as MenuItemInventoryLinkRequest[],
   });
 
@@ -31,11 +31,11 @@ export default function MenuPage() {
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/menu');
+      const res = await api.get("/menu");
       setMenuItems(res.data || []);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load menu items');
+      toast.error("Failed to load menu items");
     } finally {
       setLoading(false);
     }
@@ -50,29 +50,31 @@ export default function MenuPage() {
       setEditingItem(item);
       setFormData({
         name: item.name,
-        description: item.description || '',
+        description: item.description || "",
         category: item.category,
         price: item.price,
         displayOrder: item.displayOrder,
-        availableFrom: item.availableFrom || '',
-        availableUntil: item.availableUntil || '',
-        inventoryLinks: item.inventoryLinks.map(link => ({
+        availableFrom: item.availableFrom || "",
+        availableUntil: item.availableUntil || "",
+        inventoryLinks: item.inventoryLinks.map((link) => ({
           inventoryItemId: link.inventoryItemId,
-          quantityUsedPerUnit: link.quantityUsedPerUnit
-        }))
+          quantityUsedPerUnit: link.quantityUsedPerUnit,
+        })),
       });
-      setImagePreview(item.imageUrl ? `http://localhost:5032${item.imageUrl}` : null);
+      setImagePreview(
+        item.imageUrl ? `http://localhost:5032${item.imageUrl}` : null,
+      );
     } else {
       setEditingItem(null);
       setFormData({
-        name: '',
-        description: '',
-        category: '',
+        name: "",
+        description: "",
+        category: "",
         price: 0,
         displayOrder: 0,
-        availableFrom: '',
-        availableUntil: '',
-        inventoryLinks: []
+        availableFrom: "",
+        availableUntil: "",
+        inventoryLinks: [],
       });
       setImagePreview(null);
     }
@@ -102,78 +104,90 @@ export default function MenuPage() {
     }
 
     const form = new FormData();
-    form.append('name', formData.name);
-    form.append('category', formData.category);
-    form.append('price', formData.price.toString());
-    form.append('displayOrder', formData.displayOrder.toString());
-    if (formData.description) form.append('description', formData.description);
-    if (formData.availableFrom) form.append('availableFrom', formData.availableFrom);
-    if (formData.availableUntil) form.append('availableUntil', formData.availableUntil);
+    form.append("name", formData.name);
+    form.append("category", formData.category);
+    form.append("price", formData.price.toString());
+    form.append("displayOrder", formData.displayOrder.toString());
+    if (formData.description) form.append("description", formData.description);
+    if (formData.availableFrom)
+      form.append("availableFrom", formData.availableFrom);
+    if (formData.availableUntil)
+      form.append("availableUntil", formData.availableUntil);
 
-    form.append('inventoryLinks', JSON.stringify(formData.inventoryLinks));
+    form.append("inventoryLinks", JSON.stringify(formData.inventoryLinks));
 
     if (imageFile) {
-      form.append('image', imageFile);
+      form.append("image", imageFile);
     }
 
     try {
       if (editingItem) {
         await api.put(`/menu/${editingItem.id}`, form, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { "Content-Type": "multipart/form-data" },
         });
-        toast.success('Menu item updated successfully!');
+        toast.success("Menu item updated successfully!");
       } else {
-        await api.post('/menu', form, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+        await api.post("/menu", form, {
+          headers: { "Content-Type": "multipart/form-data" },
         });
-        toast.success('Menu item created successfully!');
+        toast.success("Menu item created successfully!");
       }
 
       setShowModal(false);
       fetchMenu();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to save menu item');
+      toast.error(err.response?.data?.message || "Failed to save menu item");
     }
   };
 
   const handleDeactivate = async (id: number) => {
-    if (!confirm('Deactivate this menu item?')) return;
+    if (!confirm("Deactivate this menu item?")) return;
     try {
       await api.delete(`/menu/${id}`);
-      toast.success('Menu item deactivated');
+      toast.success("Menu item deactivated");
       fetchMenu();
     } catch (err) {
-      toast.error('Failed to deactivate');
+      toast.error("Failed to deactivate");
     }
   };
 
   const getImageUrl = (item: MenuItem) => {
-    return item.imageUrl ? `http://localhost:5032${item.imageUrl}` : null;
+    if (!item.imageUrl) return null;
+    const base = import.meta.env.VITE_API_URL || "http://localhost:5032";
+    return `${base}${item.imageUrl}`;
   };
 
   const columns = [
-    { 
-      header: "Image", 
+    {
+      header: "Image",
       accessor: (item: MenuItem) => (
         <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden">
           {getImageUrl(item) ? (
-            <img src={getImageUrl(item)!} alt={item.name} className="w-full h-full object-cover" />
+            <img
+              src={getImageUrl(item)!}
+              alt={item.name}
+              className="w-full h-full object-cover"
+            />
           ) : (
-            <div className="flex items-center justify-center h-full text-3xl opacity-30">☕</div>
+            <div className="flex items-center justify-center h-full text-3xl opacity-30">
+              ☕
+            </div>
           )}
         </div>
-      )
+      ),
     },
     { header: "Name", accessor: "name" as const },
     { header: "Category", accessor: "category" as const },
     { header: "Price", accessor: (item: MenuItem) => `₱${item.price}` },
-    { 
-      header: "Status", 
+    {
+      header: "Status",
       accessor: (item: MenuItem) => (
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-          {item.isActive ? 'Active' : 'Inactive'}
+        <span
+          className={`px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? "bg-emerald-500 text-white" : "bg-red-500 text-white"}`}
+        >
+          {item.isActive ? "Active" : "Inactive"}
         </span>
-      )
+      ),
     },
   ];
 
@@ -182,7 +196,11 @@ export default function MenuPage() {
       <Button variant="outline" size="sm" onClick={() => openModal(item)}>
         <Edit className="w-4 h-4" />
       </Button>
-      <Button variant="outline" size="sm" onClick={() => handleDeactivate(item.id)}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => handleDeactivate(item.id)}
+      >
         <Trash2 className="w-4 h-4" />
       </Button>
     </div>
@@ -194,8 +212,8 @@ export default function MenuPage() {
     <div className="p-8">
       <Toaster position="top-center" richColors closeButton />
 
-      <PageHeader 
-        title="Menu Management" 
+      <PageHeader
+        title="Menu Management"
         actions={
           <Button onClick={() => openModal()}>
             <Plus className="w-4 h-4 mr-2" /> Add New Item
@@ -203,7 +221,7 @@ export default function MenuPage() {
         }
       />
 
-      <DataTable 
+      <DataTable
         data={menuItems}
         columns={columns}
         loading={loading}
@@ -216,15 +234,21 @@ export default function MenuPage() {
           <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[95vh] overflow-auto">
             <div className="p-8">
               <h2 className="text-2xl font-semibold mb-6">
-                {editingItem ? 'Edit Menu Item' : 'New Menu Item'}
+                {editingItem ? "Edit Menu Item" : "New Menu Item"}
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Image</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Image
+                  </label>
                   <div className="border-2 border-dashed border-zinc-300 rounded-2xl p-6 text-center">
                     {imagePreview ? (
-                      <img src={imagePreview} alt="Preview" className="mx-auto max-h-48 rounded-xl" />
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="mx-auto max-h-48 rounded-xl"
+                      />
                     ) : (
                       <ImageIcon className="mx-auto w-16 h-16 text-zinc-400" />
                     )}
@@ -240,7 +264,9 @@ export default function MenuPage() {
                 <Input
                   placeholder="Item Name"
                   value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                   required
                 />
 
@@ -248,53 +274,83 @@ export default function MenuPage() {
                   <Input
                     type="number"
                     placeholder="Price"
-                    value={formData.price || ''}
-                    onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    value={formData.price || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        price: parseFloat(e.target.value) || 0,
+                      })
+                    }
                     required
                   />
                   <Input
                     type="number"
                     placeholder="Display Order"
                     value={formData.displayOrder}
-                    onChange={e => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        displayOrder: parseInt(e.target.value) || 0,
+                      })
+                    }
                   />
                 </div>
 
                 <Input
                   placeholder="Category"
                   value={formData.category}
-                  onChange={e => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, category: e.target.value })
+                  }
                   required
                 />
 
                 <Input
                   placeholder="Description"
                   value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, description: e.target.value })
+                  }
                 />
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Available From</label>
-                    <Input 
-                      type="time" 
-                      value={formData.availableFrom} 
-                      onChange={e => setFormData({...formData, availableFrom: e.target.value})} 
+                    <label className="block text-sm font-medium mb-2">
+                      Available From
+                    </label>
+                    <Input
+                      type="time"
+                      value={formData.availableFrom}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          availableFrom: e.target.value,
+                        })
+                      }
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">Available Until</label>
-                    <Input 
-                      type="time" 
-                      value={formData.availableUntil} 
-                      onChange={e => setFormData({...formData, availableUntil: e.target.value})} 
+                    <label className="block text-sm font-medium mb-2">
+                      Available Until
+                    </label>
+                    <Input
+                      type="time"
+                      value={formData.availableUntil}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          availableUntil: e.target.value,
+                        })
+                      }
                     />
                   </div>
                 </div>
 
                 {/* Inventory Links */}
                 <div>
-                  <label className="block text-sm font-medium mb-3">Inventory Ingredients (Required)</label>
+                  <label className="block text-sm font-medium mb-3">
+                    Inventory Ingredients (Required)
+                  </label>
                   <div className="border border-zinc-200 rounded-2xl p-4 space-y-3">
                     {formData.inventoryLinks.map((link, index) => (
                       <div key={index} className="flex gap-3 items-center">
@@ -302,10 +358,15 @@ export default function MenuPage() {
                           type="number"
                           placeholder="Inventory ID"
                           value={link.inventoryItemId}
-                          onChange={e => {
+                          onChange={(e) => {
                             const newLinks = [...formData.inventoryLinks];
-                            newLinks[index].inventoryItemId = parseInt(e.target.value);
-                            setFormData({ ...formData, inventoryLinks: newLinks });
+                            newLinks[index].inventoryItemId = parseInt(
+                              e.target.value,
+                            );
+                            setFormData({
+                              ...formData,
+                              inventoryLinks: newLinks,
+                            });
                           }}
                         />
                         <Input
@@ -313,10 +374,15 @@ export default function MenuPage() {
                           step="0.001"
                           placeholder="Qty per unit"
                           value={link.quantityUsedPerUnit}
-                          onChange={e => {
+                          onChange={(e) => {
                             const newLinks = [...formData.inventoryLinks];
-                            newLinks[index].quantityUsedPerUnit = parseFloat(e.target.value);
-                            setFormData({ ...formData, inventoryLinks: newLinks });
+                            newLinks[index].quantityUsedPerUnit = parseFloat(
+                              e.target.value,
+                            );
+                            setFormData({
+                              ...formData,
+                              inventoryLinks: newLinks,
+                            });
                           }}
                         />
                         <Button
@@ -324,8 +390,13 @@ export default function MenuPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            const newLinks = formData.inventoryLinks.filter((_, i) => i !== index);
-                            setFormData({ ...formData, inventoryLinks: newLinks });
+                            const newLinks = formData.inventoryLinks.filter(
+                              (_, i) => i !== index,
+                            );
+                            setFormData({
+                              ...formData,
+                              inventoryLinks: newLinks,
+                            });
                           }}
                         >
                           Remove
@@ -341,7 +412,10 @@ export default function MenuPage() {
                     onClick={() => {
                       setFormData({
                         ...formData,
-                        inventoryLinks: [...formData.inventoryLinks, { inventoryItemId: 0, quantityUsedPerUnit: 1 }]
+                        inventoryLinks: [
+                          ...formData.inventoryLinks,
+                          { inventoryItemId: 0, quantityUsedPerUnit: 1 },
+                        ],
                       });
                     }}
                   >
@@ -351,9 +425,14 @@ export default function MenuPage() {
 
                 <div className="flex gap-3 pt-6">
                   <Button type="submit" className="flex-1">
-                    {editingItem ? 'Update Item' : 'Create Item'}
+                    {editingItem ? "Update Item" : "Create Item"}
                   </Button>
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowModal(false)}
+                  >
                     Cancel
                   </Button>
                 </div>

@@ -112,3 +112,19 @@ export interface User {
   createdAt: string;
   lastLoginAt?: string;
 }
+
+export interface DashboardResponse {
+  todaySales: number;
+  ordersToday: number;
+  openOrders: number;
+  lowStockItems: number;
+  activeStaff: number;
+  topSellingItems: TopSellingItem[];
+  lastUpdated: string;
+}
+
+export interface TopSellingItem {
+  name: string;
+  quantitySold: number;
+  revenue: number;
+}
