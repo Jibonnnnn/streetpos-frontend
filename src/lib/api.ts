@@ -1,31 +1,37 @@
-import api from '@/services/api';
-import { HubConnectionBuilder, LogLevel, HubConnection } from '@microsoft/signalr';
+import api from "@/services/api";
+import {
+    HubConnectionBuilder,
+    HubConnection,
+    LogLevel
+} from "@microsoft/signalr";
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5032';
-const DASHBOARD_HUB_URL = `${BASE_URL}/hubs/dashboard`;
+const BASE_URL =
+    import.meta.env.VITE_API_URL ?? "https://localhost:7289";
+
+const DASHBOARD_HUB_URL =
+    `${BASE_URL.replace("/api", "")}/dashboardHub`;
 
 let hubConnection: HubConnection | null = null;
 
 export async function connectToDashboardHub(onUpdate: (data: any) => void) {
-	if (hubConnection) return;
 
-	const connection = new HubConnectionBuilder()
-		.withUrl(DASHBOARD_HUB_URL)
-		.withAutomaticReconnect()
-		.configureLogging(LogLevel.Information)
-		.build();
+    if (hubConnection) return hubConnection;
 
-	connection.on('DashboardUpdated', (payload) => {
-		try {
-			onUpdate(payload);
-		} catch (e) {
-			console.error('Dashboard update handler error:', e);
-		}
-	});
+    const connection = new HubConnectionBuilder()
+        .withUrl(DASHBOARD_HUB_URL)
+        .withAutomaticReconnect()
+        .configureLogging(LogLevel.Information)
+        .build();
 
-	await connection.start();
-	hubConnection = connection;
-	return connection;
+    connection.on("ReceiveDashboardUpdate", (payload) => {
+        onUpdate(payload);
+    });
+
+    await connection.start();
+
+    hubConnection = connection;
+
+    return connection;
 }
 
 export default api;
