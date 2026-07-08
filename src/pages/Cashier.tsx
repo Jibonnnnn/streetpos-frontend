@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import api from "@/lib/api";
+import { menuService } from "@/services/menu.service";
+import { ordersService } from "@/services/orders.service";
 import type { MenuItem, CartItem, ModifierGroup, OrderResponse } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,7 @@ export default function CashierPage() {
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      const res = await api.get("/menu");
+      const res = await menuService.getMenu();
       setMenuItems(res.data || []);
     } catch (err) {
       console.error("Failed to fetch menu:", err);
@@ -54,7 +55,7 @@ export default function CashierPage() {
   const fetchMyOrders = async () => {
     setOrdersLoading(true);
     try {
-      const res = await api.get("/orders/my-orders");
+      const res = await ordersService.getMyOrders();
       setMyOrders(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Failed to fetch orders:", err);
@@ -87,7 +88,7 @@ export default function CashierPage() {
     setCustomNote("");
 
     try {
-      const res = await api.get(`/menu/${item.id}`);
+      const res = await menuService.getMenuItem(item.id);
       setCurrentModifiers(res.data?.modifierGroups || []);
     } catch (e) {
       console.error(e);
@@ -159,7 +160,7 @@ export default function CashierPage() {
     };
 
     try {
-      const createRes = await api.post("/orders", orderPayload);
+      const createRes = await ordersService.createOrder(orderPayload);
       const orderId = createRes.data?.id;
 
       const checkoutPayload = {
@@ -174,7 +175,7 @@ export default function CashierPage() {
         notes: "",
       };
 
-      await api.post("/orders/checkout", checkoutPayload);
+      await ordersService.checkoutOrder(checkoutPayload);
 
       toast.success("✅ Order completed successfully!", {
         description: "Inventory has been automatically deducted.",

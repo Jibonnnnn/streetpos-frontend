@@ -9,6 +9,7 @@ import ManagerPage from "@/pages/Manager";
 import CashierPage from "@/pages/Cashier";
 import { Toaster } from "sonner";
 import { CartProvider } from '@/contexts/CartContext';
+import LandingPage from './pages/LandingPage';
 
 function ProtectedRoute({ 
   children, 
@@ -35,6 +36,7 @@ function App() {
       <CartProvider>
         <Toaster position="top-center" richColors closeButton />
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginForm />} />
         
           <Route element={<Layout />}>

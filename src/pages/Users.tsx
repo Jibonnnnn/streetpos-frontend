@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '@/lib/api';
+import { usersService } from '@/services/users.service';
 import type { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,7 @@ export default function UsersPage() {
 
   const fetchUsers = async () => {
     try {
-      const res = await api.get('/users');
+      const res = await usersService.getUsers();
       setUsers(res.data);
     } catch (err) {
       console.error(err);
@@ -98,7 +98,7 @@ export default function UsersPage() {
 
     try {
       if (!editingUser) {
-        await api.post('/users', {
+        await usersService.createUser({
           fullName: formData.fullName,
           email: formData.email,
           phoneNumber: formData.phoneNumber || null,
@@ -107,7 +107,7 @@ export default function UsersPage() {
         });
         toast.success('New staff account created successfully!');
       } else {
-        await api.put(`/users/${editingUser.id}`, {
+        await usersService.updateUser(editingUser.id, {
           fullName: formData.fullName,
           phoneNumber: formData.phoneNumber || null,
           role: formData.role,
@@ -128,7 +128,7 @@ export default function UsersPage() {
     if (!confirm('Are you sure you want to deactivate this staff member?')) return;
 
     try {
-      await api.put(`/users/${id}/deactivate`);
+      await usersService.deactivateUser(id);
       toast.success('Staff member has been deactivated.');
       fetchUsers();
     } catch (err: any) {

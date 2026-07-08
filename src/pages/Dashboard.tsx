@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import api, { connectToDashboardHub } from '@/lib/api';
+import { connectToDashboardHub } from '@/lib/api';
+import { dashboardService } from '@/services/dashboard.service';
 import { Coffee, TrendingUp, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/layout';
 import { StatCard } from '@/components/common/StatCard';
@@ -14,7 +15,7 @@ export default function Dashboard() {
   const fetchDashboard = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/dashboard');
+      const res = await dashboardService.getDashboard();
       setDashboard(res.data);
     } catch (err: any) {
       console.error('Failed to fetch dashboard:', err);

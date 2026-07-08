@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api from '@/lib/api';
+import { inventoryService } from '@/services/inventory.service';
 import type { InventoryItemResponse } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,7 @@ export default function InventoryPage() {
   const fetchInventory = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/inventory');
+      const res = await inventoryService.getInventory();
       setInventory(res.data || []);
     } catch (err) {
       toast.error("Failed to load inventory");
@@ -60,7 +60,7 @@ export default function InventoryPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/inventory', formData);
+      await inventoryService.createInventoryItem(formData);
       toast.success('Inventory item created successfully!');
       setShowModal(false);
       fetchInventory();
@@ -77,7 +77,7 @@ export default function InventoryPage() {
     }
 
     try {
-      await api.post(`/inventory/${selectedItem.id}/adjust`, adjustData);
+      await inventoryService.adjustInventoryItem(selectedItem.id, adjustData);
       toast.success('Stock updated successfully!');
       setShowAdjustModal(false);
       fetchInventory();
@@ -90,7 +90,7 @@ export default function InventoryPage() {
     if (!confirm('Are you sure you want to permanently delete this inventory item?')) return;
 
     try {
-      await api.delete(`/inventory/${id}`);
+      await inventoryService.deleteInventoryItem(id);
       toast.success('Inventory item deleted successfully');
       fetchInventory();
     } catch (err: any) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import { menuService } from "@/services/menu.service";
 import type { MenuItem, MenuItemInventoryLinkRequest } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Plus, Edit, Trash2, ImageIcon } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/layout";
+import { getFullImageUrl } from "@/lib/imageUtils";
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -31,7 +32,7 @@ export default function MenuPage() {
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      const res = await api.get("/menu");
+      const res = await menuService.getMenu();
       setMenuItems(res.data || []);
     } catch (err) {
       console.error(err);
@@ -122,14 +123,10 @@ export default function MenuPage() {
 
     try {
       if (editingItem) {
-        await api.put(`/menu/${editingItem.id}`, form, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        await menuService.updateMenuItem(editingItem.id, form);
         toast.success("Menu item updated successfully!");
       } else {
-        await api.post("/menu", form, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        await menuService.createMenuItem(form);
         toast.success("Menu item created successfully!");
       }
 
@@ -143,7 +140,7 @@ export default function MenuPage() {
   const handleDeactivate = async (id: number) => {
     if (!confirm("Deactivate this menu item?")) return;
     try {
-      await api.delete(`/menu/${id}`);
+      await menuService.deleteMenuItem(id);
       toast.success("Menu item deactivated");
       fetchMenu();
     } catch (err) {
@@ -151,22 +148,19 @@ export default function MenuPage() {
     }
   };
 
-  const getImageUrl = (item: MenuItem) => {
-    if (!item.imageUrl) return null;
-    const base = import.meta.env.VITE_API_URL || "http://localhost:5032";
-    return `${base}${item.imageUrl}`;
-  };
-
   const columns = [
     {
       header: "Image",
       accessor: (item: MenuItem) => (
         <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden">
-          {getImageUrl(item) ? (
+          {getFullImageUrl(item.imageUrl) ? (
             <img
-              src={getImageUrl(item)!}
+              src={getFullImageUrl(item.imageUrl)!}
               alt={item.name}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-3xl opacity-30">
