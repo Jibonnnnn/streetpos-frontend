@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { menuService } from "@/services/menu.service";
+import { inventoryService } from "@/services/inventory.service";
 import type { MenuItem, MenuItemInventoryLinkRequest } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,11 @@ import { FormSection } from "@/components/forms/form-section";
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<
+    import("@/types").InventoryItemResponse[]
+  >([]);
   const [loading, setLoading] = useState(true);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
 
@@ -56,6 +61,23 @@ export default function MenuPage() {
 
   useEffect(() => {
     fetchMenu();
+  }, []);
+
+  const fetchInventory = async () => {
+    try {
+      setInventoryLoading(true);
+      const res = await inventoryService.getInventory();
+      setInventoryItems(res.data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load inventory ingredients");
+    } finally {
+      setInventoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInventory();
   }, []);
 
   const openModal = (item?: MenuItem) => {
@@ -157,6 +179,17 @@ export default function MenuPage() {
       toast.error("Failed to deactivate");
     }
   };
+
+  const activeInventoryItems = inventoryItems.filter((item) => item.isActive);
+
+  const ingredientOptions = [...activeInventoryItems];
+
+  for (const link of formData.inventoryLinks) {
+    const linkedItem = inventoryItems.find((item) => item.id === link.inventoryItemId);
+    if (linkedItem && !ingredientOptions.some((item) => item.id === linkedItem.id)) {
+      ingredientOptions.push(linkedItem);
+    }
+  }
 
   const columns = [
     {
@@ -373,14 +406,15 @@ export default function MenuPage() {
             title="Inventory ingredients"
             description="Link the ingredients used to produce one unit of this menu item."
           >
+            <p className="text-sm text-muted-foreground">
+              Choose from active inventory items. The label shows each ingredient and its remaining stock.
+            </p>
             <div className="space-y-3">
               {formData.inventoryLinks.map((link, index) => (
                 <div key={index} className="rounded-2xl border border-border/60 bg-background p-4">
                   <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                    <FormField label="Inventory item ID" description="Backend inventory reference number.">
-                      <Input
-                        type="number"
-                        placeholder="12"
+                    <FormField label="Inventory ingredient" description="Active ingredient with remaining stock.">
+                      <select
                         value={link.inventoryItemId}
                         onChange={(e) => {
                           const newLinks = [...formData.inventoryLinks];
@@ -390,7 +424,22 @@ export default function MenuPage() {
                             inventoryLinks: newLinks,
                           });
                         }}
-                      />
+                        className="h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={inventoryLoading || ingredientOptions.length === 0}
+                      >
+                        <option value={0} disabled>
+                          {inventoryLoading
+                            ? "Loading ingredients..."
+                            : ingredientOptions.length === 0
+                              ? "No active ingredients available"
+                              : "Select an ingredient"}
+                        </option>
+                        {ingredientOptions.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} • {item.currentStock} {item.unit}
+                          </option>
+                        ))}
+                      </select>
                     </FormField>
 
                     <FormField label="Qty per unit" description="Example: 0.25 or 1.5">
@@ -435,18 +484,27 @@ export default function MenuPage() {
               type="button"
               variant="outline"
               className="mt-3 w-full"
+              disabled={inventoryLoading || activeInventoryItems.length === 0}
               onClick={() => {
                 setFormData({
                   ...formData,
                   inventoryLinks: [
                     ...formData.inventoryLinks,
-                    { inventoryItemId: 0, quantityUsedPerUnit: 1 },
+                    {
+                      inventoryItemId: activeInventoryItems[0]?.id || 0,
+                      quantityUsedPerUnit: 1,
+                    },
                   ],
                 });
               }}
             >
               + Add Ingredient
             </Button>
+            {inventoryLoading ? null : activeInventoryItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No active inventory ingredients were found. Activate stock items first before creating a menu item.
+              </p>
+            ) : null}
           </FormSection>
 
           <div className="flex gap-3 pt-2">
