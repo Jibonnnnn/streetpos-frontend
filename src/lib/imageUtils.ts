@@ -1,12 +1,12 @@
 /**
  * Utility for handling image URLs from the backend
  */
+import { REST_API_BASE_URL } from "@/app/config/api";
+
 export const getFullImageUrl = (imageUrl?: string | null): string | null => {
   if (!imageUrl) return null;
 
-  const baseUrl = import.meta.env.VITE_API_URL 
-    ? import.meta.env.VITE_API_URL 
-    : 'http://localhost:5032';
+  const baseUrl = REST_API_BASE_URL.replace(/\/api$/, "");
 
   // Clean the path to avoid double slashes
   const cleanPath = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;

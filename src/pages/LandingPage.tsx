@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
 import { menuService } from '@/services/menu.service';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { BadgePill } from '@/components/common/BadgePill';
+import { getFullImageUrl } from '@/lib/imageUtils';
+import { Coffee, ArrowRight, Sparkles, Clock3 } from 'lucide-react';
+import { LandingSection, LandingMetric, LandingCard } from '@/components/landing/landing-components';
 
 interface MenuItem {
   id: number;
@@ -29,89 +35,182 @@ export default function LandingPage() {
     fetchMenu();
   }, []);
 
+  const featuredItems = menuItems.slice(0, 6);
+
   return (
-    <div className="flex flex-col min-h-screen font-sans bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50 text-zinc-800">
-      
-      {/* Header */}
-      <header className="flex justify-between items-center p-6 bg-white shadow-lg sticky top-0 z-50 backdrop-blur-lg bg-opacity-70">
-        <h1 className="text-3xl font-bold text-orange-600 tracking-tight">Streetside Café</h1>
-        <nav className="space-x-6 text-sm font-medium text-zinc-600">
-          <a href="#menu" className="hover:underline">Menu</a>
-          <a href="#about" className="hover:underline">About</a>
-          <a href="#contact" className="hover:underline">Contact</a>
-        </nav>
-        <button className="bg-brown-600 text-white px-4 py-2 rounded shadow hover:bg-brown-700">Order Now</button>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.14),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.12),_transparent_22%),linear-gradient(180deg,_#fffaf5_0%,_#fff_40%,_#f8fafc_100%)] text-zinc-900">
+      <header className="sticky top-0 z-50 border-b border-white/70 bg-white/75 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <a href="#top" className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/20">
+              <Coffee className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold tracking-tight">Streetside Café</p>
+              <p className="text-xs text-muted-foreground">Fresh brews, fast service</p>
+            </div>
+          </a>
+
+          <nav className="hidden items-center gap-6 text-sm font-medium text-zinc-600 md:flex">
+            <a href="#menu" className="transition-colors hover:text-zinc-950">Menu</a>
+            <a href="#story" className="transition-colors hover:text-zinc-950">Story</a>
+            <a href="#visit" className="transition-colors hover:text-zinc-950">Visit</a>
+          </nav>
+
+          <Button className="hidden gap-2 sm:inline-flex" size="lg">
+            Order Now
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="flex-1 flex flex-col justify-center items-center p-10 bg-gradient-to-br from-orange-100 via-yellow-100 to-orange-100 text-center">
-        <h2 className="text-4xl md:text-5xl font-extrabold mb-4 text-orange-600">Good coffee. Good food. Good vibes.</h2>
-        <p className="max-w-2xl text-lg mb-6 text-zinc-700">Order ahead for pickup or enjoy delivery. Freshly brewed, straight from our kitchen to your hands.</p>
-        <button className="bg-brown-600 text-white px-8 py-4 rounded-full shadow-lg hover:bg-brown-700 text-lg font-semibold">
-          Order Now
-        </button>
-      </section>
+      <main id="top">
+        <section className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-20">
+          <div className="flex flex-col justify-center">
+            <BadgePill tone="warning" className="mb-6 w-fit gap-2 px-4 py-2 text-sm">
+              <Sparkles className="h-3.5 w-3.5" />
+              New seasonal drinks are live
+            </BadgePill>
 
-      {/* Menu Section */}
-      <section id="menu" className="p-10 bg-white">
-        <h3 className="text-3xl font-semibold mb-8 text-center text-orange-600">Our Menu</h3>
-        {loading ? (
-          <p className="text-center text-lg text-zinc-500">Loading menu...</p>
-        ) : (
-          <div className="grid md:grid-cols-3 gap-8">
-            {menuItems.map((item) => (
-              <div key={item.id} className="border rounded-lg p-4 shadow hover:shadow-xl transition duration-300 bg-white">
-                {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.name} className="w-full h-48 object-cover rounded mb-4" />
-                ) : (
-                  <div className="w-full h-48 bg-zinc-200 flex items-center justify-center rounded mb-4 text-lg text-zinc-400">No Image</div>
-                )}
-                <h4 className="text-xl font-semibold mb-2">{item.name}</h4>
-                <p className="text-zinc-600 mb-2">{item.description}</p>
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-xl">₱{item.price.toFixed(2)}</span>
-                  <button className="bg-brown-600 text-white px-3 py-1 rounded hover:bg-brown-700 text-sm">
-                    Order
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+            <h1 className="max-w-3xl font-heading text-5xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
+              Good coffee.
+              <span className="block text-zinc-500">Good food. Good flow.</span>
+            </h1>
 
-      {/* About Us Section */}
-      <section id="about" className="p-10 bg-orange-50 text-center">
-        <h3 className="text-3xl font-semibold mb-4 text-orange-600">About Streetside Café</h3>
-        <p className="max-w-3xl mx-auto text-zinc-700 mb-6">
-          We serve the best coffee and food in town. Our cozy ambiance and friendly staff make every visit memorable. Come and experience our signature brews and hearty meals.
-        </p>
-        <button className="bg-brown-600 text-white px-6 py-3 rounded-full shadow hover:bg-brown-700 font-semibold">
-          Learn More
-        </button>
-      </section>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-600">
+              A calm, modern café experience for pickup orders, quick lunch runs, and slow afternoons. Clean design, fast ordering, and menu items that look as good as they taste.
+            </p>
 
-      {/* Contact Footer */}
-      <footer className="bg-zinc-800 text-white p-6 mt-auto">
-        <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-4 text-sm">
-          <div>
-            <h5 className="font-semibold mb-2">Visit Us</h5>
-            <p>23 Mabini St. cor. Osmena St.<br />Biasong, Dipolog City<br />7100 Zamboanga del Norte</p>
-          </div>
-          <div>
-            <h5 className="font-semibold mb-2">Hours</h5>
-            <p>Mon–Fri: 7AM – 9PM<br />Sat: 8AM – 10PM<br />Sun: 9AM – 8PM</p>
-          </div>
-          <div>
-            <h5 className="font-semibold mb-2">Follow Us</h5>
-            {/* Social icons can go here */}
-            <div className="flex space-x-4 mt-2">
-              {/* Example icons/links */}
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button size="lg" className="gap-2">
+                Browse Menu
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button size="lg" variant="outline">
+                Learn More
+              </Button>
+            </div>
+
+            <div className="mt-10 grid max-w-2xl grid-cols-2 gap-4 sm:grid-cols-3">
+              <LandingMetric label="Pickup" value="15 min" />
+              <LandingMetric label="Dine-in" value="Cozy" />
+              <LandingMetric label="Orders" value="Open daily" />
             </div>
           </div>
-        </div>
-        <p className="mt-4 text-center">&copy; 2025 Streetside Café. All rights reserved.</p>
-      </footer>
+
+          <div className="relative">
+            <div className="absolute inset-0 -z-10 rounded-[2rem] bg-gradient-to-br from-amber-200/50 via-orange-100/40 to-transparent blur-3xl" />
+            <Card className="overflow-hidden border-white/80 bg-white/80 shadow-[0_30px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl">
+              <CardContent className="p-6 sm:p-8">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Featured today</p>
+                    <h2 className="mt-1 font-heading text-2xl font-semibold tracking-tight">Menu highlights</h2>
+                  </div>
+                  <BadgePill tone="success">Live menu</BadgePill>
+                </div>
+
+                {loading ? (
+                  <div className="mt-6 space-y-4">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="h-24 animate-pulse rounded-3xl bg-zinc-100 dark:bg-zinc-800" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-6 space-y-4">
+                    {featuredItems.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-4 rounded-3xl border border-zinc-200/70 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950/50"
+                      >
+                        <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-2xl bg-zinc-100 dark:bg-zinc-800">
+                          {getFullImageUrl(item.imageUrl) ? (
+                            <img
+                              src={getFullImageUrl(item.imageUrl)!}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-2xl text-zinc-400">☕</div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium tracking-tight">{item.name}</p>
+                              <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.description || 'House favorite prepared fresh.'}</p>
+                            </div>
+                            <p className="whitespace-nowrap text-base font-semibold">₱{item.price.toFixed(2)}</p>
+                          </div>
+                          <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
+                            <BadgePill tone={index % 2 === 0 ? 'info' : 'neutral'}>{item.category}</BadgePill>
+                            <span className="inline-flex items-center gap-1">
+                              <Clock3 className="h-3.5 w-3.5" />
+                              Made fresh
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        <section id="menu" className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+          <LandingSection
+            eyebrow="Menu"
+            title="Featured menu highlights"
+            description="A curated snapshot of what’s selling today, presented in a clean card layout that scales for future campaigns and seasonal menus."
+          />
+        </section>
+
+        <section id="story" className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+          <LandingSection
+            eyebrow="Why it works"
+            title="A calmer way to present food and café ordering"
+            description="The layout is structured to feel premium, scan quickly, and leave room for future brand, loyalty, or promotion modules without reworking the page." 
+            className="mb-6"
+          />
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            {[
+              {
+                title: 'Minimal, warm, fast',
+                body: 'A layout that feels premium without getting loud. Large type, generous spacing, and clear visual hierarchy.',
+              },
+              {
+                title: 'Designed for action',
+                body: 'Menu items are presented like products, not list rows, so users can scan and decide quickly.',
+              },
+              {
+                title: 'Ready for growth',
+                body: 'The content is already structured so future sections like promos, subscriptions, or loyalty can slot in cleanly.',
+              },
+            ].map((item) => (
+              <LandingCard key={item.title} title={item.title} description={item.body} />
+            ))}
+          </div>
+        </section>
+
+        <section id="visit" className="border-t border-white/80 bg-white/60">
+          <div className="mx-auto grid max-w-7xl gap-6 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_auto] lg:px-8">
+            <div>
+              <LandingSection
+                eyebrow="Visit"
+                title="Visit Streetside Café"
+                description="23 Mabini St. cor. Osmena St., Biasong, Dipolog City, 7100 Zamboanga del Norte. Open every day with flexible hours for dine-in and pickup."
+              />
+            </div>
+            <div className="flex flex-wrap gap-3 self-start lg:justify-end">
+              <Button variant="outline">Map</Button>
+              <Button>Order Now</Button>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

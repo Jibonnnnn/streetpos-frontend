@@ -4,9 +4,16 @@ import type { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Edit, Trash2 } from 'lucide-react';
-import { Toaster, toast } from 'sonner';
+import { toast } from 'sonner';
 import { DataTable } from '@/components/common/DataTable';
 import { PageHeader } from '@/components/layout';
+import { ModalShell } from '@/components/dialogs/ModalShell';
+import { BadgePill } from '@/components/common/BadgePill';
+import { FormField } from '@/components/forms/form-field';
+import { FormSection } from '@/components/forms/form-section';
+import { CheckCircle2 } from 'lucide-react';
+
+type StaffRole = 'Admin' | 'Manager' | 'Cashier';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -18,9 +25,11 @@ export default function UsersPage() {
     fullName: '',
     email: '',
     phoneNumber: '',
-    role: 'Cashier' as 'Admin' | 'Manager' | 'Cashier',
+    role: 'Cashier' as StaffRole,
     password: '',
   });
+
+  const roleOptions: StaffRole[] = ['Cashier', 'Manager', 'Admin'];
 
   const [errors, setErrors] = useState({
     fullName: '',
@@ -143,23 +152,17 @@ export default function UsersPage() {
     { 
       header: "Role", 
       accessor: (u: User) => (
-        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-          u.role === 'Admin' ? 'bg-red-100 text-red-700' :
-          u.role === 'Manager' ? 'bg-blue-100 text-blue-700' : 
-          'bg-emerald-100 text-emerald-700'
-        }`}>
+        <BadgePill tone={u.role === 'Admin' ? 'danger' : u.role === 'Manager' ? 'info' : 'success'}>
           {u.role}
-        </span>
+        </BadgePill>
       )
     },
     { 
       header: "Status", 
       accessor: (u: User) => (
-        <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-          u.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-        }`}>
+        <BadgePill tone={u.isActive ? 'success' : 'danger'}>
           {u.isActive ? 'Active' : 'Inactive'}
-        </span>
+        </BadgePill>
       )
     },
   ];
@@ -182,12 +185,8 @@ export default function UsersPage() {
     </div>
   );
 
-  if (loading) return <div className="p-8">Loading staff...</div>;
-
   return (
-    <div className="p-8">
-      <Toaster position="top-center" richColors closeButton />
-
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader 
         title="Staff Management" 
         actions={
@@ -202,102 +201,126 @@ export default function UsersPage() {
         columns={columns}
         loading={loading}
         actions={actions}
+        emptyMessage="No staff accounts found."
       />
 
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
-            <div className="p-8">
-              <h2 className="text-2xl font-semibold mb-6">
-                {editingUser ? 'Edit Staff Member' : 'Add New Staff'}
-              </h2>
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <Input
-                    placeholder="Full Name"
-                    value={formData.fullName}
-                    onChange={(e) => {
-                      setFormData({ ...formData, fullName: e.target.value });
-                      validateField('fullName', e.target.value);
-                    }}
-                    className={errors.fullName ? "border-red-500" : ""}
-                    required
-                  />
-                  {errors.fullName && <p className="text-red-500 text-sm mt-1">{errors.fullName}</p>}
-                </div>
-
-                <div>
-                  <Input
-                    type="email"
-                    placeholder="Email Address"
-                    value={formData.email}
-                    onChange={(e) => {
-                      setFormData({ ...formData, email: e.target.value });
-                      validateField('email', e.target.value);
-                    }}
-                    className={errors.email ? "border-red-500" : ""}
-                    required
-                    disabled={!!editingUser}
-                  />
-                  {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
-                </div>
-
+      <ModalShell
+        open={showModal}
+        title={editingUser ? 'Edit Staff Member' : 'Add New Staff'}
+        description="Create or update staff access and profile details."
+        onClose={() => setShowModal(false)}
+        className="max-w-2xl"
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <FormSection
+            title="Profile details"
+            description="This information appears in staff lists and account summaries."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField label="Full name" description="Shown throughout the admin workspace." error={errors.fullName || undefined}>
                 <Input
-                  placeholder="Phone Number (optional)"
-                  value={formData.phoneNumber}
-                  onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                  placeholder="Maria Santos"
+                  value={formData.fullName}
+                  onChange={(e) => {
+                    setFormData({ ...formData, fullName: e.target.value });
+                    validateField('fullName', e.target.value);
+                  }}
+                  className={errors.fullName ? "border-red-500" : ""}
+                  required
                 />
+              </FormField>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Role</label>
-                  <select
-                    className="w-full p-3 rounded-2xl border border-input bg-background"
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-                  >
-                    <option value="Cashier">Cashier</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Admin">Admin</option>
-                  </select>
-                </div>
-
-                {!editingUser && (
-                  <div>
-                    <Input
-                      type="password"
-                      placeholder="Password (min 8 chars, 1 lowercase)"
-                      value={formData.password}
-                      onChange={(e) => {
-                        setFormData({ ...formData, password: e.target.value });
-                        validateField('password', e.target.value);
-                      }}
-                      className={errors.password ? "border-red-500" : ""}
-                      required
-                    />
-                    {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <Button type="submit" className="flex-1">
-                    {editingUser ? 'Update Staff' : 'Create Staff'}
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="flex-1" 
-                    onClick={() => setShowModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
+              <FormField label="Email address" description="Used for login and notifications." error={errors.email || undefined}>
+                <Input
+                  type="email"
+                  placeholder="staff@streetpos.com"
+                  value={formData.email}
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value });
+                    validateField('email', e.target.value);
+                  }}
+                  className={errors.email ? "border-red-500" : ""}
+                  required
+                  disabled={!!editingUser}
+                />
+              </FormField>
             </div>
+
+            <FormField label="Phone number" description="Optional contact number for shift coordination.">
+              <Input
+                placeholder="0917 123 4567"
+                value={formData.phoneNumber}
+                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection
+            title="Access level"
+            description="Choose the role that matches the employee's responsibilities."
+          >
+            <div className="grid gap-3 md:grid-cols-3">
+              {roleOptions.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, role })}
+                  className={`rounded-3xl border p-4 text-left transition-all ${
+                    formData.role === role
+                      ? 'border-primary bg-primary/5 shadow-sm'
+                      : 'border-border/60 bg-background hover:bg-muted/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{role}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {role === 'Admin' ? 'Full system access' : role === 'Manager' ? 'Operations and inventory' : 'POS-only access'}
+                      </p>
+                    </div>
+                    {formData.role === role ? <CheckCircle2 className="h-4 w-4 text-primary" /> : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </FormSection>
+
+          {!editingUser && (
+            <FormSection
+              title="Security"
+              description="Create the initial password for the new staff account."
+            >
+              <FormField label="Password" description="Minimum 8 characters and one lowercase letter." error={errors.password || undefined}>
+                <Input
+                  type="password"
+                  placeholder="Enter a secure password"
+                  value={formData.password}
+                  onChange={(e) => {
+                    setFormData({ ...formData, password: e.target.value });
+                    validateField('password', e.target.value);
+                  }}
+                  className={errors.password ? "border-red-500" : ""}
+                  required
+                />
+              </FormField>
+            </FormSection>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" className="flex-1">
+              {editingUser ? 'Update staff' : 'Create staff'}
+            </Button>
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="flex-1" 
+              onClick={() => setShowModal(false)}
+            >
+              Cancel
+            </Button>
           </div>
-        </div>
-      )}
+        </form>
+      </ModalShell>
     </div>
   );
 }

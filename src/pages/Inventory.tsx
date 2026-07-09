@@ -4,9 +4,13 @@ import type { InventoryItemResponse } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Trash2, AlertTriangle } from 'lucide-react';
-import { Toaster, toast } from 'sonner';
+import { toast } from 'sonner';
 import { DataTable } from '@/components/common/DataTable';
 import { PageHeader } from '@/components/layout';
+import { ModalShell } from '@/components/dialogs/ModalShell';
+import { BadgePill } from '@/components/common/BadgePill';
+import { FormField } from '@/components/forms/form-field';
+import { FormSection } from '@/components/forms/form-section';
 
 export default function InventoryPage() {
   const [inventory, setInventory] = useState<InventoryItemResponse[]>([]);
@@ -106,11 +110,11 @@ export default function InventoryPage() {
     { 
       header: "Status", 
       accessor: (item: InventoryItemResponse) => item.isLowStock ? (
-        <span className="inline-flex items-center gap-1 text-amber-600 text-sm">
-          <AlertTriangle size={16} /> Low Stock
-        </span>
+          <BadgePill tone="warning" className="gap-1">
+            <AlertTriangle size={16} /> Low Stock
+          </BadgePill>
       ) : (
-        <span className="text-emerald-600 text-sm">In Stock</span>
+          <BadgePill tone="success">In Stock</BadgePill>
       )
     },
   ];
@@ -132,9 +136,7 @@ export default function InventoryPage() {
   );
 
   return (
-    <div className="p-8">
-      <Toaster position="top-center" richColors closeButton />
-
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader 
         title="Inventory Management" 
         actions={
@@ -152,88 +154,123 @@ export default function InventoryPage() {
         emptyMessage="No inventory items found."
       />
 
-      {/* Create Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
-            <div className="p-8">
-              <h2 className="text-2xl font-semibold mb-6">New Inventory Item</h2>
-              <form onSubmit={handleCreate} className="space-y-6">
-                <Input placeholder="Name *" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                <Input placeholder="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm mb-2">Initial Stock</label>
-                    <Input type="number" value={formData.initialStock} onChange={e => setFormData({...formData, initialStock: parseInt(e.target.value) || 0})} />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-2">Unit</label>
-                    <Input value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} />
-                  </div>
-                </div>
+      <ModalShell
+        open={showModal}
+        title="New Inventory Item"
+        description="Add a stock item and its reorder thresholds."
+        onClose={() => setShowModal(false)}
+        className="max-w-2xl"
+      >
+        <form onSubmit={handleCreate} className="space-y-5">
+          <FormSection
+            title="Item details"
+            description="Name the inventory item and add a short internal description."
+          >
+            <FormField label="Item name" description="Use the name your staff recognizes in stock counts.">
+              <Input
+                placeholder="Espresso beans"
+                value={formData.name}
+                onChange={e => setFormData({...formData, name: e.target.value})}
+                required
+              />
+            </FormField>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm mb-2">Reorder Point</label>
-                    <Input type="number" value={formData.reorderPoint} onChange={e => setFormData({...formData, reorderPoint: parseInt(e.target.value) || 0})} />
-                  </div>
-                  <div>
-                    <label className="block text-sm mb-2">Reorder Quantity</label>
-                    <Input type="number" value={formData.reorderQuantity} onChange={e => setFormData({...formData, reorderQuantity: parseInt(e.target.value) || 0})} />
-                  </div>
-                </div>
+            <FormField label="Description" description="Optional notes for suppliers or staff.">
+              <Input
+                placeholder="Dark roast, whole bean"
+                value={formData.description}
+                onChange={e => setFormData({...formData, description: e.target.value})}
+              />
+            </FormField>
+          </FormSection>
 
-                <div className="flex gap-3 pt-4">
-                  <Button type="submit" className="flex-1">Create</Button>
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button>
-                </div>
-              </form>
+          <FormSection
+            title="Stock rules"
+            description="Set the initial stock and reorder thresholds for this item."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField label="Initial stock" description="Starting quantity when the item is created.">
+                <Input
+                  type="number"
+                  value={formData.initialStock}
+                  onChange={e => setFormData({...formData, initialStock: parseInt(e.target.value) || 0})}
+                />
+              </FormField>
+
+              <FormField label="Unit" description="pcs, bottles, bags, liters, and similar units.">
+                <Input
+                  value={formData.unit}
+                  onChange={e => setFormData({...formData, unit: e.target.value})}
+                />
+              </FormField>
+
+              <FormField label="Reorder point" description="Alert threshold before stock becomes critical.">
+                <Input
+                  type="number"
+                  value={formData.reorderPoint}
+                  onChange={e => setFormData({...formData, reorderPoint: parseInt(e.target.value) || 0})}
+                />
+              </FormField>
+
+              <FormField label="Reorder quantity" description="Suggested amount to restock at once.">
+                <Input
+                  type="number"
+                  value={formData.reorderQuantity}
+                  onChange={e => setFormData({...formData, reorderQuantity: parseInt(e.target.value) || 0})}
+                />
+              </FormField>
             </div>
+          </FormSection>
+
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" className="flex-1">Create item</Button>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>Cancel</Button>
           </div>
-        </div>
-      )}
+        </form>
+      </ModalShell>
 
-      {/* Update Stock Modal */}
-      {showAdjustModal && selectedItem && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-md">
-            <div className="p-8">
-              <h2 className="text-2xl font-semibold mb-6">Update Stock - {selectedItem.name}</h2>
-              <p className="mb-6">Current: <span className="font-semibold">{selectedItem.currentStock} {selectedItem.unit}</span></p>
+      <ModalShell
+        open={showAdjustModal && Boolean(selectedItem)}
+        title={selectedItem ? `Update Stock - ${selectedItem.name}` : "Update Stock"}
+        description={selectedItem ? `Current: ${selectedItem.currentStock} ${selectedItem.unit}` : undefined}
+        onClose={() => setShowAdjustModal(false)}
+        className="max-w-lg"
+      >
+        {selectedItem ? (
+          <form onSubmit={handleAdjustStock} className="space-y-5">
+            <FormSection
+              title="Stock adjustment"
+              description="Use positive values for restocks and negative values for usage or corrections."
+            >
+              <FormField label="Quantity change (+ or -)" description="Example: 50, -10, or 12.5">
+                <Input 
+                  type="number" 
+                  step="0.01"
+                  value={adjustData.quantityChange} 
+                  onChange={e => setAdjustData({...adjustData, quantityChange: parseFloat(e.target.value) || 0})} 
+                  placeholder="50 or -10"
+                  required
+                />
+              </FormField>
 
-              <form onSubmit={handleAdjustStock} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Quantity Change (+ or -)</label>
-                  <Input 
-                    type="number" 
-                    step="0.01"
-                    value={adjustData.quantityChange} 
-                    onChange={e => setAdjustData({...adjustData, quantityChange: parseFloat(e.target.value) || 0})} 
-                    placeholder="50 or -10"
-                    required
-                  />
-                </div>
+              <FormField label="Reason" description="Required for audit tracking and future stock history."
+              >
+                <Input 
+                  placeholder="Restock, Usage, Correction..." 
+                  value={adjustData.reason} 
+                  onChange={e => setAdjustData({...adjustData, reason: e.target.value})} 
+                  required 
+                />
+              </FormField>
+            </FormSection>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">Reason</label>
-                  <Input 
-                    placeholder="Restock, Usage, Correction..." 
-                    value={adjustData.reason} 
-                    onChange={e => setAdjustData({...adjustData, reason: e.target.value})} 
-                    required 
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button type="submit" className="flex-1">Update Stock</Button>
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowAdjustModal(false)}>Cancel</Button>
-                </div>
-              </form>
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" className="flex-1">Update stock</Button>
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setShowAdjustModal(false)}>Cancel</Button>
             </div>
-          </div>
-        </div>
-      )}
+          </form>
+        ) : null}
+      </ModalShell>
     </div>
   );
 }

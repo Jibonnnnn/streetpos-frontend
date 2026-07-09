@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { connectToDashboardHub } from '@/lib/api';
+import { connectToDashboardHub, disconnectFromDashboardHub } from '@/lib/api';
 import { dashboardService } from '@/services/dashboard.service';
 import { Coffee, TrendingUp, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/layout';
 import { StatCard } from '@/components/common/StatCard';
 import { DataTable } from '@/components/common/DataTable';
 import type { DashboardResponse, TopSellingItem } from '@/types';
-import { Toaster, toast } from 'sonner';
+import { toast } from 'sonner';
+import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 
 export default function Dashboard() {
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -51,18 +52,12 @@ export default function Dashboard() {
 
     return () => {
       isMounted = false;
+      void disconnectFromDashboardHub();
     };
   }, []);
 
   if (loading || !dashboard) {
-    return (
-      <div className="flex items-center justify-center h-[70vh]">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-zinc-500">Loading live dashboard...</p>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const topItemsColumns = [
@@ -72,9 +67,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-8 space-y-8 max-w-screen-2xl mx-auto">
-      <Toaster position="top-center" richColors closeButton />
-
+    <div className="mx-auto max-w-screen-2xl space-y-6 p-4 sm:space-y-8 sm:p-6 lg:p-8">
       <PageHeader 
         title="Live Operations Dashboard" 
         description="Real-time business insights • Auto-updates"

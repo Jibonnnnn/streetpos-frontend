@@ -4,10 +4,14 @@ import type { MenuItem, MenuItemInventoryLinkRequest } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Edit, Trash2, ImageIcon } from "lucide-react";
-import { Toaster, toast } from "sonner";
+import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/layout";
 import { getFullImageUrl } from "@/lib/imageUtils";
+import { ModalShell } from "@/components/dialogs/ModalShell";
+import { BadgePill } from "@/components/common/BadgePill";
+import { FormField } from "@/components/forms/form-field";
+import { FormSection } from "@/components/forms/form-section";
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -28,6 +32,14 @@ export default function MenuPage() {
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
 
   const fetchMenu = async () => {
     try {
@@ -62,9 +74,7 @@ export default function MenuPage() {
           quantityUsedPerUnit: link.quantityUsedPerUnit,
         })),
       });
-      setImagePreview(
-        item.imageUrl ? `http://localhost:5032${item.imageUrl}` : null,
-      );
+      setImagePreview(getFullImageUrl(item.imageUrl));
     } else {
       setEditingItem(null);
       setFormData({
@@ -176,11 +186,9 @@ export default function MenuPage() {
     {
       header: "Status",
       accessor: (item: MenuItem) => (
-        <span
-          className={`px-3 py-1 rounded-full text-xs font-medium ${item.isActive ? "bg-emerald-500 text-white" : "bg-red-500 text-white"}`}
-        >
+        <BadgePill tone={item.isActive ? "success" : "danger"}>
           {item.isActive ? "Active" : "Inactive"}
-        </span>
+        </BadgePill>
       ),
     },
   ];
@@ -200,12 +208,8 @@ export default function MenuPage() {
     </div>
   );
 
-  if (loading) return <div className="p-8 text-center">Loading menu...</div>;
-
   return (
-    <div className="p-8">
-      <Toaster position="top-center" richColors closeButton />
-
+    <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader
         title="Menu Management"
         actions={
@@ -220,221 +224,246 @@ export default function MenuPage() {
         columns={columns}
         loading={loading}
         actions={actions}
+        emptyMessage="No menu items found."
       />
 
-      {/* Create / Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-auto">
-          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg max-h-[95vh] overflow-auto">
-            <div className="p-8">
-              <h2 className="text-2xl font-semibold mb-6">
-                {editingItem ? "Edit Menu Item" : "New Menu Item"}
-              </h2>
-
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Image
-                  </label>
-                  <div className="border-2 border-dashed border-zinc-300 rounded-2xl p-6 text-center">
-                    {imagePreview ? (
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="mx-auto max-h-48 rounded-xl"
-                      />
-                    ) : (
-                      <ImageIcon className="mx-auto w-16 h-16 text-zinc-400" />
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageChange}
-                      className="mt-4 block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700"
+      <ModalShell
+        open={showModal}
+        title={editingItem ? "Edit Menu Item" : "New Menu Item"}
+        description="Manage menu details, availability, and ingredient links."
+        onClose={() => setShowModal(false)}
+        className="max-w-2xl"
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <FormSection
+            title="Visual identity"
+            description="Add a menu image so staff and customers can recognize the item quickly."
+          >
+            <div className="rounded-[1.75rem] border border-dashed border-zinc-300 bg-muted/20 p-5 text-center dark:border-zinc-700">
+              <div className="mx-auto flex max-w-md flex-col items-center gap-4">
+                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-white text-zinc-400 shadow-sm dark:bg-zinc-900">
+                  {imagePreview ? (
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="h-full w-full object-cover"
                     />
-                  </div>
+                  ) : (
+                    <ImageIcon className="h-12 w-12" />
+                  )}
                 </div>
+                <div>
+                  <p className="font-medium">Upload a menu image</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Use a clean, well-lit image for the best storefront feel.
+                  </p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="block w-full text-sm text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-200"
+                />
+              </div>
+            </div>
+          </FormSection>
 
+          <FormSection
+            title="Item details"
+            description="Name, price, and menu ordering information."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField label="Item name" description="The customer-facing menu label.">
                 <Input
-                  placeholder="Item Name"
+                  placeholder="Iced Latte"
                   value={formData.name}
                   onChange={(e) =>
                     setFormData({ ...formData, name: e.target.value })
                   }
                   required
                 />
+              </FormField>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    type="number"
-                    placeholder="Price"
-                    value={formData.price || ""}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        price: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    required
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Display Order"
-                    value={formData.displayOrder}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        displayOrder: parseInt(e.target.value) || 0,
-                      })
-                    }
-                  />
-                </div>
-
+              <FormField label="Category" description="Drinks, pastries, meals, and similar groups.">
                 <Input
-                  placeholder="Category"
+                  placeholder="Coffee"
                   value={formData.category}
                   onChange={(e) =>
                     setFormData({ ...formData, category: e.target.value })
                   }
                   required
                 />
+              </FormField>
 
+              <FormField label="Price" description="Use a decimal number if needed.">
                 <Input
-                  placeholder="Description"
-                  value={formData.description}
+                  type="number"
+                  placeholder="120"
+                  value={formData.price || ""}
                   onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
+                    setFormData({
+                      ...formData,
+                      price: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  required
+                />
+              </FormField>
+
+              <FormField label="Display order" description="Lower numbers appear earlier in lists.">
+                <Input
+                  type="number"
+                  placeholder="1"
+                  value={formData.displayOrder}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      displayOrder: parseInt(e.target.value) || 0,
+                    })
                   }
                 />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Available From
-                    </label>
-                    <Input
-                      type="time"
-                      value={formData.availableFrom}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          availableFrom: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Available Until
-                    </label>
-                    <Input
-                      type="time"
-                      value={formData.availableUntil}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          availableUntil: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-
-                {/* Inventory Links */}
-                <div>
-                  <label className="block text-sm font-medium mb-3">
-                    Inventory Ingredients (Required)
-                  </label>
-                  <div className="border border-zinc-200 rounded-2xl p-4 space-y-3">
-                    {formData.inventoryLinks.map((link, index) => (
-                      <div key={index} className="flex gap-3 items-center">
-                        <Input
-                          type="number"
-                          placeholder="Inventory ID"
-                          value={link.inventoryItemId}
-                          onChange={(e) => {
-                            const newLinks = [...formData.inventoryLinks];
-                            newLinks[index].inventoryItemId = parseInt(
-                              e.target.value,
-                            );
-                            setFormData({
-                              ...formData,
-                              inventoryLinks: newLinks,
-                            });
-                          }}
-                        />
-                        <Input
-                          type="number"
-                          step="0.001"
-                          placeholder="Qty per unit"
-                          value={link.quantityUsedPerUnit}
-                          onChange={(e) => {
-                            const newLinks = [...formData.inventoryLinks];
-                            newLinks[index].quantityUsedPerUnit = parseFloat(
-                              e.target.value,
-                            );
-                            setFormData({
-                              ...formData,
-                              inventoryLinks: newLinks,
-                            });
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const newLinks = formData.inventoryLinks.filter(
-                              (_, i) => i !== index,
-                            );
-                            setFormData({
-                              ...formData,
-                              inventoryLinks: newLinks,
-                            });
-                          }}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-3 w-full"
-                    onClick={() => {
-                      setFormData({
-                        ...formData,
-                        inventoryLinks: [
-                          ...formData.inventoryLinks,
-                          { inventoryItemId: 0, quantityUsedPerUnit: 1 },
-                        ],
-                      });
-                    }}
-                  >
-                    + Add Ingredient
-                  </Button>
-                </div>
-
-                <div className="flex gap-3 pt-6">
-                  <Button type="submit" className="flex-1">
-                    {editingItem ? "Update Item" : "Create Item"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setShowModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
+              </FormField>
             </div>
+
+            <FormField label="Description" description="Optional detail shown on the menu card.">
+              <Input
+                placeholder="Smooth espresso with milk and ice"
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection
+            title="Availability"
+            description="Optional time windows help the kitchen and cashier know when items should appear."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField label="Available from">
+                <Input
+                  type="time"
+                  value={formData.availableFrom}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      availableFrom: e.target.value,
+                    })
+                  }
+                />
+              </FormField>
+
+              <FormField label="Available until">
+                <Input
+                  type="time"
+                  value={formData.availableUntil}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      availableUntil: e.target.value,
+                    })
+                  }
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Inventory ingredients"
+            description="Link the ingredients used to produce one unit of this menu item."
+          >
+            <div className="space-y-3">
+              {formData.inventoryLinks.map((link, index) => (
+                <div key={index} className="rounded-2xl border border-border/60 bg-background p-4">
+                  <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                    <FormField label="Inventory item ID" description="Backend inventory reference number.">
+                      <Input
+                        type="number"
+                        placeholder="12"
+                        value={link.inventoryItemId}
+                        onChange={(e) => {
+                          const newLinks = [...formData.inventoryLinks];
+                          newLinks[index].inventoryItemId = parseInt(e.target.value);
+                          setFormData({
+                            ...formData,
+                            inventoryLinks: newLinks,
+                          });
+                        }}
+                      />
+                    </FormField>
+
+                    <FormField label="Qty per unit" description="Example: 0.25 or 1.5">
+                      <Input
+                        type="number"
+                        step="0.001"
+                        placeholder="1"
+                        value={link.quantityUsedPerUnit}
+                        onChange={(e) => {
+                          const newLinks = [...formData.inventoryLinks];
+                          newLinks[index].quantityUsedPerUnit = parseFloat(e.target.value);
+                          setFormData({
+                            ...formData,
+                            inventoryLinks: newLinks,
+                          });
+                        }}
+                      />
+                    </FormField>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full md:w-auto"
+                      onClick={() => {
+                        const newLinks = formData.inventoryLinks.filter(
+                          (_, i) => i !== index,
+                        );
+                        setFormData({
+                          ...formData,
+                          inventoryLinks: newLinks,
+                        });
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full"
+              onClick={() => {
+                setFormData({
+                  ...formData,
+                  inventoryLinks: [
+                    ...formData.inventoryLinks,
+                    { inventoryItemId: 0, quantityUsedPerUnit: 1 },
+                  ],
+                });
+              }}
+            >
+              + Add Ingredient
+            </Button>
+          </FormSection>
+
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" className="flex-1">
+              {editingItem ? "Update item" : "Create item"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowModal(false)}
+            >
+              Cancel
+            </Button>
           </div>
-        </div>
-      )}
+        </form>
+      </ModalShell>
     </div>
   );
 }

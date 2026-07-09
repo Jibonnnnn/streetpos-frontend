@@ -4,16 +4,17 @@ import {
     HubConnection,
     LogLevel
 } from "@microsoft/signalr";
-
-const BASE_URL =
-    import.meta.env.VITE_API_URL ?? "https://localhost:7289";
+import { SIGNALR_BASE_URL } from "@/app/config/api";
+import type { DashboardResponse } from "@/types";
 
 const DASHBOARD_HUB_URL =
-    `${BASE_URL.replace("/api", "")}/dashboardHub`;
+    `${SIGNALR_BASE_URL}/dashboardHub`;
 
 let hubConnection: HubConnection | null = null;
 
-export async function connectToDashboardHub(onUpdate: (data: any) => void) {
+export async function connectToDashboardHub(
+    onUpdate: (data: DashboardResponse) => void,
+) {
 
     if (hubConnection) return hubConnection;
 
@@ -32,6 +33,13 @@ export async function connectToDashboardHub(onUpdate: (data: any) => void) {
     hubConnection = connection;
 
     return connection;
+}
+
+export async function disconnectFromDashboardHub() {
+    if (!hubConnection) return;
+
+    await hubConnection.stop();
+    hubConnection = null;
 }
 
 export default api;

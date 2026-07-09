@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { TrendingUp, Users, Coffee, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Users, Coffee, AlertTriangle, ArrowRight, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/layout';
 import { StatCard } from '@/components/common/StatCard';
+import { BadgePill } from '@/components/common/BadgePill';
 
 export default function ManagerPage() {
   const [stats] = useState({
@@ -13,22 +14,26 @@ export default function ManagerPage() {
     topItem: "Iced Latte"
   });
 
-  useEffect(() => {
-    console.log("Manager dashboard data loaded");
-  }, []);
-
   return (
     <div className="space-y-8">
       <PageHeader 
         title="Manager Dashboard" 
-        description="Daily operations overview"
-        actions={<Button>Generate Full Report</Button>}
+        description="Daily operations overview with live performance, staffing, and inventory signals."
+        actions={
+          <>
+            <Button variant="outline" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Insights
+            </Button>
+            <Button>Generate Full Report</Button>
+          </>
+        }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <StatCard 
           title="Today's Sales" 
-          value={`$${stats.todaySales}`} 
+          value={`₱${stats.todaySales.toLocaleString()}`} 
           icon={TrendingUp}
           change="+18% from yesterday"
         />
@@ -50,22 +55,46 @@ export default function ManagerPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardContent className="p-8">
-            <h3 className="font-semibold mb-4">Top Selling Items</h3>
-            <p className="text-2xl">{stats.topItem}</p>
-            <p className="text-sm text-zinc-500">42 sold today</p>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Card className="border-border/60 bg-white/80 shadow-sm dark:bg-zinc-900/75">
+          <CardContent className="p-5 sm:p-8">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <h3 className="font-heading text-xl font-semibold">Top Selling Items</h3>
+                <p className="text-sm text-muted-foreground">Best performer in the current day</p>
+              </div>
+              <BadgePill tone="success">+12% velocity</BadgePill>
+            </div>
+
+            <div className="rounded-3xl bg-gradient-to-br from-amber-50 to-orange-50 p-6 dark:from-zinc-800 dark:to-zinc-900">
+              <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">Featured item</p>
+              <p className="mt-3 text-3xl font-semibold tracking-tight">{stats.topItem}</p>
+              <p className="mt-2 text-sm text-muted-foreground">42 sold today</p>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-8">
-            <h3 className="font-semibold mb-4">Quick Actions</h3>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="outline" onClick={() => window.location.href = '/menu'}>Manage Menu</Button>
-              <Button variant="outline">View Inventory</Button>
-              <Button variant="outline">Staff Schedule</Button>
+        <Card className="border-border/60 bg-white/80 shadow-sm dark:bg-zinc-900/75">
+          <CardContent className="p-5 sm:p-8">
+            <h3 className="font-heading text-xl font-semibold">Quick Actions</h3>
+            <p className="mt-2 text-sm text-muted-foreground">Jump into the most common manager workflows.</p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <Button variant="outline" className="justify-between" onClick={() => window.location.href = '/menu'}>
+                Manage Menu
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="justify-between">
+                View Inventory
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="justify-between">
+                Staff Schedule
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" className="justify-between">
+                Open Reports
+                <ArrowRight className="h-4 w-4" />
+              </Button>
             </div>
           </CardContent>
         </Card>
