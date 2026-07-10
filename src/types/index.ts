@@ -4,13 +4,13 @@ export interface MenuItem {
   description?: string;
   category: string;
   price: number;
+  imageFileName?: string;
   imageUrl?: string;
   displayOrder: number;
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;
-  
-  // Availability times
+
   availableFrom?: string;
   availableUntil?: string;
 

@@ -11,3 +11,5 @@ export const REST_API_BASE_URL = normalizedBaseUrl.endsWith("/api")
 export const SIGNALR_BASE_URL = normalizedBaseUrl.endsWith("/api")
   ? normalizedBaseUrl.replace(/\/api$/, "")
   : normalizedBaseUrl;
+
+export const IMAGE_BASE_URL = SIGNALR_BASE_URL;

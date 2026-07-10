@@ -1,21 +1,17 @@
-/**
- * Utility for handling image URLs from the backend
- */
-import { REST_API_BASE_URL } from "@/app/config/api";
+import { IMAGE_BASE_URL } from "@/app/config/api";
 
-export const getFullImageUrl = (imageUrl?: string | null): string | null => {
-  if (!imageUrl) return null;
+export const getFullImageUrl = (imageRef?: string | null): string | null => {
+  if (!imageRef) return null;
 
-  const baseUrl = REST_API_BASE_URL.replace(/\/api$/, "");
+  if (/^https?:\/\//i.test(imageRef) || imageRef.startsWith("data:")) {
+    return imageRef;
+  }
 
-  // Clean the path to avoid double slashes
-  const cleanPath = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
-  
-  return `${baseUrl}${cleanPath}`;
-};
+  const cleanRef = imageRef.replace(/^\/+/, "").trim();
 
-// Optional: For fallback placeholder
-export const getImageWithFallback = (imageUrl?: string | null) => {
-  const url = getFullImageUrl(imageUrl);
-  return url || null;
+  if (cleanRef.startsWith("images/")) {
+    return `${IMAGE_BASE_URL}/${cleanRef}`;
+  }
+
+  return `${IMAGE_BASE_URL}/images/menu/${cleanRef}`;
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { menuService } from '@/services/menu.service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,6 +12,7 @@ interface MenuItem {
   name: string;
   description?: string;
   price: number;
+  imageFileName?: string;
   imageUrl?: string;
   category: string;
 }
@@ -19,6 +20,7 @@ interface MenuItem {
 export default function LandingPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeSlide, setActiveSlide] = useState(0);
 
   useEffect(() => {
     // Fetch menu data from your API
@@ -36,6 +38,24 @@ export default function LandingPage() {
   }, []);
 
   const featuredItems = menuItems.slice(0, 6);
+  const slideshowItems = useMemo(
+    () =>
+      featuredItems
+        .filter((item) => getFullImageUrl(item.imageFileName ?? item.imageUrl))
+        .slice(0, 5),
+    [featuredItems],
+  );
+  const activeSlideItem = slideshowItems[activeSlide] ?? slideshowItems[0];
+
+  useEffect(() => {
+    if (slideshowItems.length <= 1) return;
+
+    const interval = window.setInterval(() => {
+      setActiveSlide((current) => (current + 1) % slideshowItems.length);
+    }, 4500);
+
+    return () => window.clearInterval(interval);
+  }, [slideshowItems.length]);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(251,146,60,0.14),_transparent_26%),radial-gradient(circle_at_top_right,_rgba(245,158,11,0.12),_transparent_22%),linear-gradient(180deg,_#fffaf5_0%,_#fff_40%,_#f8fafc_100%)] text-zinc-900">
@@ -101,14 +121,118 @@ export default function LandingPage() {
           <div className="relative">
             <div className="absolute inset-0 -z-10 rounded-[2rem] bg-gradient-to-br from-amber-200/50 via-orange-100/40 to-transparent blur-3xl" />
             <Card className="overflow-hidden border-white/80 bg-white/80 shadow-[0_30px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl">
-              <CardContent className="p-6 sm:p-8">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Featured today</p>
-                    <h2 className="mt-1 font-heading text-2xl font-semibold tracking-tight">Menu highlights</h2>
+              <CardContent className="p-5 sm:p-6">
+                <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-zinc-950 shadow-2xl">
+                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/85 via-zinc-950/20 to-transparent" />
+                  <div className="absolute inset-0">
+                    {loading ? (
+                      <div className="h-full w-full animate-pulse bg-gradient-to-br from-zinc-800 via-zinc-700 to-zinc-900" />
+                    ) : slideshowItems.length > 0 ? (
+                      slideshowItems.map((item, index) => {
+                        const imageSrc = getFullImageUrl(item.imageFileName ?? item.imageUrl);
+
+                        return (
+                          <div
+                            key={item.id}
+                            className={`absolute inset-0 transition-all duration-1000 ease-out ${index === activeSlide ? 'opacity-100 scale-100' : 'opacity-0 scale-[1.04]'}`}
+                          >
+                            {imageSrc ? (
+                              <img
+                                src={imageSrc}
+                                alt={item.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : null}
+                            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/85 via-zinc-950/25 to-transparent" />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(251,191,36,0.3),_transparent_35%),linear-gradient(135deg,_#18181b,_#3f3f46)]">
+                        <div className="text-center text-white/85">
+                          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-white/10 text-4xl backdrop-blur-md">
+                            ☕
+                          </div>
+                          <p className="text-sm uppercase tracking-[0.35em] text-white/60">Fresh images loading</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <BadgePill tone="success">Live menu</BadgePill>
+
+                  <div className="absolute inset-x-0 bottom-0 z-10 h-28 bg-gradient-to-t from-zinc-950 via-zinc-950/70 to-transparent" />
+
+                  <div className="relative z-10 flex min-h-[28rem] flex-col justify-between p-5 sm:min-h-[34rem] sm:p-6">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="max-w-xs rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.2em] text-white/80 backdrop-blur-md">
+                        Featured today
+                      </div>
+                      <BadgePill tone="success" className="bg-white/90 text-zinc-900">
+                        Live menu
+                      </BadgePill>
+                    </div>
+
+                    <div className="mt-auto grid gap-5 sm:grid-cols-[1fr_auto] sm:items-end">
+                      <div className="max-w-xl text-white">
+                        <p className="text-sm font-medium uppercase tracking-[0.25em] text-white/70">Seasonal picks</p>
+                        <h2 className="mt-2 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
+                          {activeSlideItem ? activeSlideItem.name : 'Smooth transitions, fresh photos, menu that feels alive.'}
+                        </h2>
+                        <p className="mt-3 max-w-lg text-sm leading-6 text-white/75 sm:text-base">
+                          {activeSlideItem?.description || 'A rotating showcase of best sellers and new drinks, animated with a soft crossfade so the page feels polished instead of static.'}
+                        </p>
+                        {activeSlideItem ? (
+                          <div className="mt-5 flex flex-wrap items-center gap-3">
+                            <BadgePill tone="neutral" className="border border-white/15 bg-white/10 text-white backdrop-blur-md">
+                              {activeSlideItem.category}
+                            </BadgePill>
+                            <div className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white backdrop-blur-md">
+                              ₱{activeSlideItem.price.toFixed(2)}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="flex items-center gap-2 sm:flex-col sm:items-end">
+                        {slideshowItems.map((item, index) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setActiveSlide(index)}
+                            className={`h-2.5 rounded-full transition-all duration-300 ${index === activeSlide ? 'w-8 bg-white' : 'w-2.5 bg-white/40 hover:bg-white/70'}`}
+                            aria-label={`Show slide ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                {slideshowItems.length > 1 ? (
+                  <div className="mt-4 grid grid-cols-5 gap-2 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/80 p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60">
+                    {slideshowItems.map((item, index) => {
+                      const thumbSrc = getFullImageUrl(item.imageFileName ?? item.imageUrl);
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setActiveSlide(index)}
+                          className={`group relative overflow-hidden rounded-xl transition-all duration-300 ${index === activeSlide ? 'ring-2 ring-amber-500 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950' : 'opacity-70 hover:opacity-100'}`}
+                          aria-label={`Preview ${item.name}`}
+                        >
+                          <div className="aspect-[4/3] bg-zinc-100 dark:bg-zinc-800">
+                            {thumbSrc ? (
+                              <img src={thumbSrc} alt={item.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                            ) : null}
+                          </div>
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-zinc-950/90 to-transparent p-2 text-left">
+                            <p className="line-clamp-1 text-xs font-medium text-white">{item.name}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
 
                 {loading ? (
                   <div className="mt-6 space-y-4">
@@ -121,14 +245,14 @@ export default function LandingPage() {
                     {featuredItems.map((item, index) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-4 rounded-3xl border border-zinc-200/70 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950/50"
+                        className="flex items-center gap-4 rounded-3xl border border-zinc-200/70 bg-white p-3 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950/50"
                       >
                         <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-2xl bg-zinc-100 dark:bg-zinc-800">
-                          {getFullImageUrl(item.imageUrl) ? (
+                          {getFullImageUrl(item.imageFileName ?? item.imageUrl) ? (
                             <img
-                              src={getFullImageUrl(item.imageUrl)!}
+                              src={getFullImageUrl(item.imageFileName ?? item.imageUrl)!}
                               alt={item.name}
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center text-2xl text-zinc-400">☕</div>

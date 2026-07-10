@@ -1,7 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { menuService } from "@/services/menu.service";
 import { inventoryService } from "@/services/inventory.service";
-import type { MenuItem, MenuItemInventoryLinkRequest } from "@/types";
+import type {
+  MenuItem,
+  MenuItemInventoryLinkRequest,
+  InventoryItemResponse,
+} from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Edit, Trash2, ImageIcon } from "lucide-react";
@@ -16,11 +20,10 @@ import { FormSection } from "@/components/forms/form-section";
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [inventoryItems, setInventoryItems] = useState<
-    import("@/types").InventoryItemResponse[]
-  >([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItemResponse[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
-  const [inventoryLoading, setInventoryLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
 
@@ -38,11 +41,24 @@ export default function MenuPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
+  // Optimized ingredient options
+  const ingredientOptions = useMemo(() => {
+    const active = inventoryItems.filter((i) => i.isActive);
+    const linkedIds = new Set(
+      formData.inventoryLinks.map((l) => l.inventoryItemId),
+    );
+
+    return [
+      ...active,
+      ...inventoryItems.filter(
+        (i) => linkedIds.has(i.id) && !active.some((a) => a.id === i.id),
+      ),
+    ];
+  }, [inventoryItems, formData.inventoryLinks]);
+
   useEffect(() => {
     return () => {
-      if (imagePreview?.startsWith("blob:")) {
-        URL.revokeObjectURL(imagePreview);
-      }
+      if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
     };
   }, [imagePreview]);
 
@@ -52,31 +68,23 @@ export default function MenuPage() {
       const res = await menuService.getMenu();
       setMenuItems(res.data || []);
     } catch (err) {
-      console.error(err);
       toast.error("Failed to load menu items");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchMenu();
-  }, []);
-
   const fetchInventory = async () => {
     try {
-      setInventoryLoading(true);
       const res = await inventoryService.getInventory();
       setInventoryItems(res.data || []);
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to load inventory ingredients");
-    } finally {
-      setInventoryLoading(false);
+      toast.error("Failed to load inventory");
     }
   };
 
   useEffect(() => {
+    fetchMenu();
     fetchInventory();
   }, []);
 
@@ -91,12 +99,12 @@ export default function MenuPage() {
         displayOrder: item.displayOrder,
         availableFrom: item.availableFrom || "",
         availableUntil: item.availableUntil || "",
-        inventoryLinks: item.inventoryLinks.map((link) => ({
-          inventoryItemId: link.inventoryItemId,
-          quantityUsedPerUnit: link.quantityUsedPerUnit,
+        inventoryLinks: item.inventoryLinks.map((l) => ({
+          inventoryItemId: l.inventoryItemId,
+          quantityUsedPerUnit: l.quantityUsedPerUnit,
         })),
       });
-      setImagePreview(getFullImageUrl(item.imageUrl));
+      setImagePreview(getFullImageUrl(item.imageFileName ?? item.imageUrl));
     } else {
       setEditingItem(null);
       setFormData({
@@ -116,55 +124,106 @@ export default function MenuPage() {
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    if (e.target.files?.[0]) {
       const file = e.target.files[0];
       setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
     }
   };
 
+  const addInventoryLink = useCallback(() => {
+    if (ingredientOptions.length === 0) {
+      toast.error("No active inventory items available");
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      inventoryLinks: [
+        ...prev.inventoryLinks,
+        {
+          inventoryItemId: ingredientOptions[0].id,
+          quantityUsedPerUnit: 1,
+        },
+      ],
+    }));
+  }, [ingredientOptions]);
+
+  const updateInventoryLink = useCallback(
+    (
+      index: number,
+      field: "inventoryItemId" | "quantityUsedPerUnit",
+      value: number,
+    ) => {
+      setFormData((prev) => {
+        const newLinks = [...prev.inventoryLinks];
+        newLinks[index] = { ...newLinks[index], [field]: value };
+        return { ...prev, inventoryLinks: newLinks };
+      });
+    },
+    [],
+  );
+
+  const removeInventoryLink = useCallback((index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      inventoryLinks: prev.inventoryLinks.filter((_, i) => i !== index),
+    }));
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.category || formData.price <= 0) {
+    if (
+      !formData.name?.trim() ||
+      !formData.category?.trim() ||
+      formData.price <= 0
+    ) {
       toast.error("Name, category and price are required");
       return;
     }
 
-    if (!formData.inventoryLinks || formData.inventoryLinks.length === 0) {
-      toast.error("At least one inventory ingredient is required");
+    if (formData.inventoryLinks.length === 0) {
+      toast.error("At least one inventory ingredient is required.");
       return;
     }
 
-    const form = new FormData();
-    form.append("name", formData.name);
-    form.append("category", formData.category);
-    form.append("price", formData.price.toString());
-    form.append("displayOrder", formData.displayOrder.toString());
-    if (formData.description) form.append("description", formData.description);
-    if (formData.availableFrom)
-      form.append("availableFrom", formData.availableFrom);
-    if (formData.availableUntil)
-      form.append("availableUntil", formData.availableUntil);
+    const payload = {
+      name: formData.name.trim(),
+      description: formData.description?.trim() || null,
+      category: formData.category.trim(),
+      price: formData.price,
+      displayOrder: formData.displayOrder,
+      availableFrom: formData.availableFrom || null,
+      availableUntil: formData.availableUntil || null,
+      inventoryLinks: formData.inventoryLinks,
+    };
 
-    form.append("inventoryLinks", JSON.stringify(formData.inventoryLinks));
-
-    if (imageFile) {
-      form.append("image", imageFile);
-    }
+    const formDataToSend = new FormData();
+    formDataToSend.append("request", JSON.stringify(payload));
+    if (imageFile) formDataToSend.append("image", imageFile);
 
     try {
       if (editingItem) {
-        await menuService.updateMenuItem(editingItem.id, form);
+        await menuService.updateMenuItem(editingItem.id, formDataToSend);
         toast.success("Menu item updated successfully!");
       } else {
-        await menuService.createMenuItem(form);
+        await menuService.createMenuItem(formDataToSend);
         toast.success("Menu item created successfully!");
       }
-
+      const updatedMenu = await menuService.getMenu(); // force fresh fetch
+      console.log(
+        "🔍 Debug - Newly saved menu items:",
+        updatedMenu.data?.map((item: any) => ({
+          name: item.name,
+          imageFileName: item.imageFileName,
+          fullUrl: getFullImageUrl(item.imageFileName ?? item.imageUrl),
+        })),
+      );
       setShowModal(false);
-      fetchMenu();
+      await fetchMenu();
     } catch (err: any) {
+      console.error(err);
       toast.error(err.response?.data?.message || "Failed to save menu item");
     }
   };
@@ -175,43 +234,37 @@ export default function MenuPage() {
       await menuService.deleteMenuItem(id);
       toast.success("Menu item deactivated");
       fetchMenu();
-    } catch (err) {
+    } catch {
       toast.error("Failed to deactivate");
     }
   };
 
-  const activeInventoryItems = inventoryItems.filter((item) => item.isActive);
-
-  const ingredientOptions = [...activeInventoryItems];
-
-  for (const link of formData.inventoryLinks) {
-    const linkedItem = inventoryItems.find((item) => item.id === link.inventoryItemId);
-    if (linkedItem && !ingredientOptions.some((item) => item.id === linkedItem.id)) {
-      ingredientOptions.push(linkedItem);
-    }
-  }
-
   const columns = [
     {
       header: "Image",
-      accessor: (item: MenuItem) => (
-        <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden">
-          {getFullImageUrl(item.imageUrl) ? (
-            <img
-              src={getFullImageUrl(item.imageUrl)!}
-              alt={item.name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-3xl opacity-30">
-              ☕
-            </div>
-          )}
-        </div>
-      ),
+      accessor: (item: MenuItem) => {
+        const url = getFullImageUrl(item.imageFileName ?? item.imageUrl);
+        console.log(`Image URL for ${item.name}:`, url); // debug
+        return (
+          <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden border">
+            {url ? (
+              <img
+                src={url}
+                alt={item.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  console.error(`Failed to load image for ${item.name}:`, url);
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-3xl opacity-30">
+                ☕
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     { header: "Name", accessor: "name" as const },
     { header: "Category", accessor: "category" as const },
@@ -270,7 +323,7 @@ export default function MenuPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <FormSection
             title="Visual identity"
-            description="Add a menu image so staff and customers can recognize the item quickly."
+            description="Add a menu image..."
           >
             <div className="rounded-[1.75rem] border border-dashed border-zinc-300 bg-muted/20 p-5 text-center dark:border-zinc-700">
               <div className="mx-auto flex max-w-md flex-col items-center gap-4">
@@ -285,17 +338,11 @@ export default function MenuPage() {
                     <ImageIcon className="h-12 w-12" />
                   )}
                 </div>
-                <div>
-                  <p className="font-medium">Upload a menu image</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Use a clean, well-lit image for the best storefront feel.
-                  </p>
-                </div>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleImageChange}
-                  className="block w-full text-sm text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-700 dark:file:bg-zinc-800 dark:file:text-zinc-200"
+                  className="block w-full text-sm text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-700"
                 />
               </div>
             </div>
@@ -306,7 +353,7 @@ export default function MenuPage() {
             description="Name, price, and menu ordering information."
           >
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Item name" description="The customer-facing menu label.">
+              <FormField label="Item name">
                 <Input
                   placeholder="Iced Latte"
                   value={formData.name}
@@ -316,8 +363,7 @@ export default function MenuPage() {
                   required
                 />
               </FormField>
-
-              <FormField label="Category" description="Drinks, pastries, meals, and similar groups.">
+              <FormField label="Category">
                 <Input
                   placeholder="Coffee"
                   value={formData.category}
@@ -327,12 +373,11 @@ export default function MenuPage() {
                   required
                 />
               </FormField>
-
-              <FormField label="Price" description="Use a decimal number if needed.">
+              <FormField label="Price">
                 <Input
                   type="number"
                   placeholder="120"
-                  value={formData.price || ""}
+                  value={formData.price}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
@@ -342,8 +387,7 @@ export default function MenuPage() {
                   required
                 />
               </FormField>
-
-              <FormField label="Display order" description="Lower numbers appear earlier in lists.">
+              <FormField label="Display order">
                 <Input
                   type="number"
                   placeholder="1"
@@ -357,8 +401,7 @@ export default function MenuPage() {
                 />
               </FormField>
             </div>
-
-            <FormField label="Description" description="Optional detail shown on the menu card.">
+            <FormField label="Description">
               <Input
                 placeholder="Smooth espresso with milk and ice"
                 value={formData.description}
@@ -371,7 +414,7 @@ export default function MenuPage() {
 
           <FormSection
             title="Availability"
-            description="Optional time windows help the kitchen and cashier know when items should appear."
+            description="Optional time windows."
           >
             <div className="grid gap-4 md:grid-cols-2">
               <FormField label="Available from">
@@ -379,23 +422,16 @@ export default function MenuPage() {
                   type="time"
                   value={formData.availableFrom}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      availableFrom: e.target.value,
-                    })
+                    setFormData({ ...formData, availableFrom: e.target.value })
                   }
                 />
               </FormField>
-
               <FormField label="Available until">
                 <Input
                   type="time"
                   value={formData.availableUntil}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      availableUntil: e.target.value,
-                    })
+                    setFormData({ ...formData, availableUntil: e.target.value })
                   }
                 />
               </FormField>
@@ -406,34 +442,25 @@ export default function MenuPage() {
             title="Inventory ingredients"
             description="Link the ingredients used to produce one unit of this menu item."
           >
-            <p className="text-sm text-muted-foreground">
-              Choose from active inventory items. The label shows each ingredient and its remaining stock.
-            </p>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {formData.inventoryLinks.map((link, index) => (
-                <div key={index} className="rounded-2xl border border-border/60 bg-background p-4">
+                <div
+                  key={index}
+                  className="rounded-2xl border border-border/60 bg-background p-4"
+                >
                   <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                    <FormField label="Inventory ingredient" description="Active ingredient with remaining stock.">
+                    <FormField label="Inventory ingredient">
                       <select
                         value={link.inventoryItemId}
-                        onChange={(e) => {
-                          const newLinks = [...formData.inventoryLinks];
-                          newLinks[index].inventoryItemId = parseInt(e.target.value);
-                          setFormData({
-                            ...formData,
-                            inventoryLinks: newLinks,
-                          });
-                        }}
-                        className="h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={inventoryLoading || ingredientOptions.length === 0}
+                        onChange={(e) =>
+                          updateInventoryLink(
+                            index,
+                            "inventoryItemId",
+                            parseInt(e.target.value),
+                          )
+                        }
+                        className="h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
                       >
-                        <option value={0} disabled>
-                          {inventoryLoading
-                            ? "Loading ingredients..."
-                            : ingredientOptions.length === 0
-                              ? "No active ingredients available"
-                              : "Select an ingredient"}
-                        </option>
                         {ingredientOptions.map((item) => (
                           <option key={item.id} value={item.id}>
                             {item.name} • {item.currentStock} {item.unit}
@@ -442,36 +469,25 @@ export default function MenuPage() {
                       </select>
                     </FormField>
 
-                    <FormField label="Qty per unit" description="Example: 0.25 or 1.5">
+                    <FormField label="Qty per unit">
                       <Input
                         type="number"
                         step="0.001"
-                        placeholder="1"
                         value={link.quantityUsedPerUnit}
-                        onChange={(e) => {
-                          const newLinks = [...formData.inventoryLinks];
-                          newLinks[index].quantityUsedPerUnit = parseFloat(e.target.value);
-                          setFormData({
-                            ...formData,
-                            inventoryLinks: newLinks,
-                          });
-                        }}
+                        onChange={(e) =>
+                          updateInventoryLink(
+                            index,
+                            "quantityUsedPerUnit",
+                            parseFloat(e.target.value) || 0,
+                          )
+                        }
                       />
                     </FormField>
 
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full md:w-auto"
-                      onClick={() => {
-                        const newLinks = formData.inventoryLinks.filter(
-                          (_, i) => i !== index,
-                        );
-                        setFormData({
-                          ...formData,
-                          inventoryLinks: newLinks,
-                        });
-                      }}
+                      onClick={() => removeInventoryLink(index)}
                     >
                       Remove
                     </Button>
@@ -484,27 +500,10 @@ export default function MenuPage() {
               type="button"
               variant="outline"
               className="mt-3 w-full"
-              disabled={inventoryLoading || activeInventoryItems.length === 0}
-              onClick={() => {
-                setFormData({
-                  ...formData,
-                  inventoryLinks: [
-                    ...formData.inventoryLinks,
-                    {
-                      inventoryItemId: activeInventoryItems[0]?.id || 0,
-                      quantityUsedPerUnit: 1,
-                    },
-                  ],
-                });
-              }}
+              onClick={addInventoryLink}
             >
               + Add Ingredient
             </Button>
-            {inventoryLoading ? null : activeInventoryItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No active inventory ingredients were found. Activate stock items first before creating a menu item.
-              </p>
-            ) : null}
           </FormSection>
 
           <div className="flex gap-3 pt-2">
