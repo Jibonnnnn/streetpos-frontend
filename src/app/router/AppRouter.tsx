@@ -9,6 +9,7 @@ import ManagerPage from "@/pages/Manager";
 import CashierPage from "@/pages/Cashier";
 import LandingPage from "@/pages/LandingPage";
 import { LoginForm } from "@/components/login-form";
+import ReportsPage from "@/pages/Reports";
 
 export function AppRouter() {
   return (
@@ -67,6 +68,15 @@ export function AppRouter() {
             }
           />
         </Route>
+
+        <Route
+          path="/reports"
+          element={
+            <ProtectedRoute>
+              <ReportsPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
