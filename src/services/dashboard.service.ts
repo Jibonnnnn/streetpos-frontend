@@ -2,7 +2,7 @@ import api from './api';
 
 export const dashboardService = {
   getDashboard: async () => {
-    return api.get('/dashboard');
+    return api.get('/dashboard/overview');
   },
 
   getSalesReport: async (filter: any) => {
