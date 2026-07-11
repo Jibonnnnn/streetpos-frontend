@@ -16,7 +16,7 @@ export default function ManagerPage() {
     activeStaff: 0,
     topItem: "Loading..."
   });
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   const fetchDashboard = async () => {
     try {
