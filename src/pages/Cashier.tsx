@@ -201,7 +201,7 @@ export default function CashierPage() {
   const filteredMenu = menuItems.filter(
     (item) =>
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchTerm.toLowerCase()),
+      item.categoryName.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const changeDue =
@@ -298,7 +298,7 @@ export default function CashierPage() {
                       <div>
                         <h3 className="font-heading text-lg font-semibold tracking-tight">{item.name}</h3>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {item.category}
+                          {item.categoryName}
                         </p>
                       </div>
                       <p className="text-lg font-semibold text-amber-600">₱{item.price.toFixed(2)}</p>

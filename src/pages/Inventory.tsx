@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { inventoryService } from "@/services/inventory.service";
 import type { InventoryItemResponse } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, Loader2, Package, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/layout";
@@ -11,6 +11,9 @@ import { ModalShell } from "@/components/dialogs/ModalShell";
 import { BadgePill } from "@/components/common/BadgePill";
 import { FormField } from "@/components/forms/form-field";
 import { FormSection } from "@/components/forms/form-section";
+import { cn } from "@/lib/utils";
+
+const UNIT_PRESETS = ["pcs", "kg", "g", "L", "mL", "bottles", "bags", "boxes"];
 
 export default function InventoryPage() {
   const [inventory, setInventory] = useState<InventoryItemResponse[]>([]);
@@ -19,6 +22,9 @@ export default function InventoryPage() {
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [selectedItem, setSelectedItem] =
     useState<InventoryItemResponse | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   const [formData, setFormData] = useState({
     name: "",
@@ -34,7 +40,27 @@ export default function InventoryPage() {
     reason: "",
   });
 
-  const isFormValid = formData.name.trim().length > 0 && formData.initialStock >= 0;
+  const nameError =
+    touched.name && !formData.name.trim() ? "Item name is required" : undefined;
+  const stockError =
+    touched.initialStock && formData.initialStock < 0
+      ? "Initial stock cannot be negative"
+      : undefined;
+  const reorderError =
+    touched.reorderPoint && formData.reorderPoint > 0 && formData.reorderQuantity <= 0
+      ? "Reorder quantity should be greater than 0"
+      : undefined;
+
+  const isFormValid =
+    formData.name.trim().length > 0 &&
+    formData.initialStock >= 0 &&
+    formData.reorderQuantity >= 0;
+
+  const stockLevel = useMemo(() => {
+    if (formData.reorderPoint <= 0) return "unmonitored";
+    if (formData.initialStock <= formData.reorderPoint) return "low";
+    return "healthy";
+  }, [formData.initialStock, formData.reorderPoint]);
 
   const fetchInventory = async () => {
     try {
@@ -54,13 +80,14 @@ export default function InventoryPage() {
 
   const openCreateModal = () => {
     setSelectedItem(null);
-    setFormData({ 
-      name: '', 
-      description: '', 
-      initialStock: 0, 
-      unit: 'pcs', 
-      reorderPoint: 10, 
-      reorderQuantity: 50 
+    setTouched({});
+    setFormData({
+      name: "",
+      description: "",
+      initialStock: 0,
+      unit: "pcs",
+      reorderPoint: 10,
+      reorderQuantity: 50,
     });
     setShowModal(true);
   };
@@ -71,8 +98,9 @@ export default function InventoryPage() {
     setShowAdjustModal(true);
   };
 
-    const handleCreate = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTouched({ name: true, initialStock: true, reorderPoint: true });
 
     if (!formData.name.trim()) {
       toast.error("Item name is required");
@@ -83,17 +111,20 @@ export default function InventoryPage() {
       return;
     }
 
+    setCreating(true);
     try {
       await inventoryService.createInventoryItem(formData);
-      
+
       toast.success(`✅ ${formData.name} created successfully!`, {
-        description: `Initial stock: ${formData.initialStock} ${formData.unit}`
+        description: `Initial stock: ${formData.initialStock} ${formData.unit}`,
       });
 
       setShowModal(false);
-      fetchInventory();        // Refresh the list
+      fetchInventory(); // Refresh the list
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to create inventory item");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -104,6 +135,7 @@ export default function InventoryPage() {
       return;
     }
 
+    setAdjusting(true);
     try {
       await inventoryService.adjustInventoryItem(selectedItem.id, adjustData);
       toast.success("Stock updated successfully!");
@@ -111,6 +143,8 @@ export default function InventoryPage() {
       fetchInventory();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update stock");
+    } finally {
+      setAdjusting(false);
     }
   };
 
@@ -192,80 +226,104 @@ export default function InventoryPage() {
         title="New Inventory Item"
         description="Add a stock item and its reorder thresholds."
         onClose={() => setShowModal(false)}
-        className="max-w-2xl"
+        className="max-w-lg"
       >
-        <form onSubmit={handleCreate} className="space-y-5">
-          <FormSection
-            title="Item details"
-            description="Name the inventory item and add a short internal description."
-          >
+        <form onSubmit={handleCreate} className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300">
+                <Package className="h-3.5 w-3.5" />
+              </div>
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                Item details
+              </h3>
+            </div>
+
             <FormField
               label="Item name"
-              description="Use the name your staff recognizes in stock counts."
+              error={nameError}
             >
               <Input
                 placeholder="Espresso beans"
                 value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                aria-invalid={Boolean(nameError)}
                 required
               />
             </FormField>
 
-            <FormField
-              label="Description"
-              description="Optional notes for suppliers or staff."
-            >
+            <FormField label="Description">
               <Input
-                placeholder="Dark roast, whole bean"
+                placeholder="Dark roast, whole bean (optional)"
                 value={formData.description}
                 onChange={(e) =>
                   setFormData({ ...formData, description: e.target.value })
                 }
               />
             </FormField>
-          </FormSection>
+          </div>
 
-          <FormSection
-            title="Stock rules"
-            description="Set the initial stock and reorder thresholds for this item."
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                label="Initial stock"
-                description="Starting quantity when the item is created."
-              >
+          <div className="h-px bg-border/60" />
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300">
+                <AlertTriangle className="h-3.5 w-3.5" />
+              </div>
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                Stock rules
+              </h3>
+            </div>
+
+            <FormField label="Initial stock" error={stockError}>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={formData.initialStock}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    initialStock: parseFloat(e.target.value) || 0,
+                  })
+                }
+                onBlur={() => setTouched((t) => ({ ...t, initialStock: true }))}
+                aria-invalid={Boolean(stockError)}
+              />
+            </FormField>
+
+            <FormField label="Unit">
+              <div className="grid grid-cols-4 gap-1.5">
+                {UNIT_PRESETS.map((unit) => (
+                  <button
+                    key={unit}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, unit })}
+                    className={cn(
+                      "rounded-xl border px-2 py-1.5 text-xs font-medium transition-all",
+                      formData.unit === unit
+                        ? "border-transparent bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950"
+                        : "border-border/70 bg-white text-muted-foreground hover:border-zinc-300 hover:text-foreground dark:bg-zinc-900 dark:hover:border-zinc-700",
+                    )}
+                  >
+                    {unit}
+                  </button>
+                ))}
+              </div>
+              <Input
+                value={formData.unit}
+                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                placeholder="Or type a custom unit"
+                className="mt-1.5"
+              />
+            </FormField>
+
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Reorder point" error={reorderError}>
                 <Input
                   type="number"
-                  value={formData.initialStock}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      initialStock: parseInt(e.target.value) || 0,
-                    })
-                  }
-                />
-              </FormField>
-
-              <FormField
-                label="Unit"
-                description="pcs, bottles, bags, liters, and similar units."
-              >
-                <Input
-                  value={formData.unit}
-                  onChange={(e) =>
-                    setFormData({ ...formData, unit: e.target.value })
-                  }
-                />
-              </FormField>
-
-              <FormField
-                label="Reorder point"
-                description="Alert threshold before stock becomes critical."
-              >
-                <Input
-                  type="number"
+                  min={0}
                   value={formData.reorderPoint}
                   onChange={(e) =>
                     setFormData({
@@ -273,15 +331,14 @@ export default function InventoryPage() {
                       reorderPoint: parseInt(e.target.value) || 0,
                     })
                   }
+                  onBlur={() => setTouched((t) => ({ ...t, reorderPoint: true }))}
                 />
               </FormField>
 
-              <FormField
-                label="Reorder quantity"
-                description="Suggested amount to restock at once."
-              >
+              <FormField label="Reorder qty">
                 <Input
                   type="number"
+                  min={0}
                   value={formData.reorderQuantity}
                   onChange={(e) =>
                     setFormData({
@@ -292,17 +349,67 @@ export default function InventoryPage() {
                 />
               </FormField>
             </div>
-          </FormSection>
 
-          <div className="flex gap-3 pt-2">
-            <Button type="submit" className="flex-1" disabled={!isFormValid}>
-              Create item
+            {/* Live preview */}
+            <div
+              className={cn(
+                "flex items-start gap-2.5 rounded-2xl p-3.5 transition-colors",
+                stockLevel === "low"
+                  ? "bg-amber-50 dark:bg-amber-500/10"
+                  : stockLevel === "unmonitored"
+                    ? "bg-muted/40"
+                    : "bg-emerald-50 dark:bg-emerald-500/10",
+              )}
+            >
+              <div
+                className={cn(
+                  "mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg",
+                  stockLevel === "low"
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-300"
+                    : stockLevel === "unmonitored"
+                      ? "bg-zinc-500/10 text-zinc-500"
+                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
+                )}
+              >
+                {stockLevel === "low" ? (
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                ) : stockLevel === "unmonitored" ? (
+                  <Package className="h-3.5 w-3.5" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {formData.name.trim() || "This item"} starts at {formData.initialStock}{" "}
+                  {formData.unit || "units"}.
+                </span>{" "}
+                {stockLevel === "low"
+                  ? `That's at or below its reorder point, so it'll show as Low Stock right away.`
+                  : stockLevel === "unmonitored"
+                    ? "Set a reorder point above 0 to get low-stock alerts."
+                    : `Stays In Stock until it drops to ${formData.reorderPoint} ${formData.unit || "units"}.`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <Button type="submit" className="flex-1" disabled={!isFormValid || creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create item"
+              )}
             </Button>
             <Button
               type="button"
               variant="outline"
               className="flex-1"
               onClick={() => setShowModal(false)}
+              disabled={creating}
             >
               Cancel
             </Button>
@@ -348,6 +455,21 @@ export default function InventoryPage() {
                 />
               </FormField>
 
+              {adjustData.quantityChange !== 0 && (
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    adjustData.quantityChange > 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400",
+                  )}
+                >
+                  New stock will be{" "}
+                  {(selectedItem.currentStock + adjustData.quantityChange).toFixed(2)}{" "}
+                  {selectedItem.unit}
+                </p>
+              )}
+
               <FormField
                 label="Reason"
                 description="Required for audit tracking and future stock history."
@@ -364,14 +486,22 @@ export default function InventoryPage() {
             </FormSection>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" className="flex-1">
-                Update stock
+              <Button type="submit" className="flex-1" disabled={adjusting}>
+                {adjusting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update stock"
+                )}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 className="flex-1"
                 onClick={() => setShowAdjustModal(false)}
+                disabled={adjusting}
               >
                 Cancel
               </Button>
