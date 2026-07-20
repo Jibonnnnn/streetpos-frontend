@@ -10,6 +10,7 @@ import CashierPage from "@/pages/Cashier";
 import LandingPage from "@/pages/LandingPage";
 import { LoginForm } from "@/components/login-form";
 import ReportsPage from "@/pages/Reports";
+import CategoriesPage from "@/pages/Categories";
 
 export function AppRouter() {
   return (
@@ -18,6 +19,7 @@ export function AppRouter() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginForm />} />
 
+        {/* All protected pages inside AppLayout (sidebar) */}
         <Route element={<AppLayout />}>
           <Route
             path="/dashboard"
@@ -32,6 +34,22 @@ export function AppRouter() {
             element={
               <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
                 <InventoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/menu"
+            element={
+              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
+                <MenuPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/categories"
+            element={
+              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
+                <CategoriesPage />
               </ProtectedRoute>
             }
           />
@@ -52,14 +70,6 @@ export function AppRouter() {
             }
           />
           <Route
-            path="/menu"
-            element={
-              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
-                <MenuPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/users"
             element={
               <ProtectedRoute allowedRoles={["Admin"]}>
@@ -69,6 +79,7 @@ export function AppRouter() {
           />
         </Route>
 
+        {/* Reports outside layout if needed */}
         <Route
           path="/reports"
           element={
