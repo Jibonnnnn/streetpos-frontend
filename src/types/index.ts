@@ -2,7 +2,8 @@ export interface MenuItem {
   id: number;
   name: string;
   description?: string;
-  category: string;
+  categoryId: number;
+  categoryName: string;
   price: number;
   imageFileName?: string;
   imageUrl?: string;
@@ -127,4 +128,31 @@ export interface TopSellingItem {
   name: string;
   quantitySold: number;
   revenue: number;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  description?: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export type ActivityLogType =
+  | "InventoryAddition"
+  | "InventoryDeduction"
+  | "TimeClockIn"
+  | "TimeClockOut"
+  | "PurchaseOrder"
+  | "Other";
+ 
+export interface ActivityLogEntry {
+  id: number;
+  type: ActivityLogType;
+  message: string;
+  actorName?: string;
+  quantity?: number;
+  unit?: string;
+  createdAt: string;
 }

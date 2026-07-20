@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { menuService } from "@/services/menu.service";
 import { inventoryService } from "@/services/inventory.service";
+import { categoryService } from "@/services/category.service";
 import type {
   MenuItem,
   MenuItemInventoryLinkRequest,
   InventoryItemResponse,
+  Category,
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,14 +25,18 @@ export default function MenuPage() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItemResponse[]>(
     [],
   );
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [categorySubmitting, setCategorySubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    category: "",
+    categoryId: 0,
     price: 0,
     displayOrder: 0,
     availableFrom: "",
@@ -38,10 +44,15 @@ export default function MenuPage() {
     inventoryLinks: [] as MenuItemInventoryLinkRequest[],
   });
 
+  const [categoryForm, setCategoryForm] = useState({
+    name: "",
+    description: "",
+    displayOrder: 0,
+  });
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  // Optimized ingredient options
   const ingredientOptions = useMemo(() => {
     const active = inventoryItems.filter((i) => i.isActive);
     const linkedIds = new Set(
@@ -58,7 +69,9 @@ export default function MenuPage() {
 
   useEffect(() => {
     return () => {
-      if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+      if (imagePreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
     };
   }, [imagePreview]);
 
@@ -67,8 +80,8 @@ export default function MenuPage() {
       setLoading(true);
       const res = await menuService.getMenu();
       setMenuItems(res.data || []);
-    } catch (err) {
-      toast.error("Failed to load menu items");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to load menu items");
     } finally {
       setLoading(false);
     }
@@ -79,22 +92,32 @@ export default function MenuPage() {
       const res = await inventoryService.getInventory();
       setInventoryItems(res.data || []);
     } catch (err) {
-      toast.error("Failed to load inventory");
+      toast.error("Failed to load inventory items");
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await categoryService.getAll();
+      setCategories(res.data.filter((c) => c.isActive));
+    } catch (err) {
+      toast.error("Failed to load categories");
     }
   };
 
   useEffect(() => {
     fetchMenu();
     fetchInventory();
+    fetchCategories();
   }, []);
 
-  const openModal = (item?: MenuItem) => {
+  const openMenuModal = (item?: MenuItem) => {
     if (item) {
       setEditingItem(item);
       setFormData({
         name: item.name,
         description: item.description || "",
-        category: item.category,
+        categoryId: item.categoryId,
         price: item.price,
         displayOrder: item.displayOrder,
         availableFrom: item.availableFrom || "",
@@ -110,7 +133,7 @@ export default function MenuPage() {
       setFormData({
         name: "",
         description: "",
-        category: "",
+        categoryId: 0,
         price: 0,
         displayOrder: 0,
         availableFrom: "",
@@ -123,9 +146,18 @@ export default function MenuPage() {
     setShowModal(true);
   };
 
+  const openCategoryModal = () => {
+    setCategoryForm({ name: "", description: "", displayOrder: 0 });
+    setShowCategoryModal(true);
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      const file = e.target.files[0];
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size must be less than 5MB");
+        return;
+      }
       setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
     }
@@ -171,37 +203,34 @@ export default function MenuPage() {
     }));
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleMenuSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
 
-    if (
-      !formData.name?.trim() ||
-      !formData.category?.trim() ||
-      formData.price <= 0
-    ) {
-      toast.error("Name, category and price are required");
-      return;
-    }
-
-    if (formData.inventoryLinks.length === 0) {
-      toast.error("At least one inventory ingredient is required.");
-      return;
-    }
-
-    const payload = {
-      name: formData.name.trim(),
-      description: formData.description?.trim() || null,
-      category: formData.category.trim(),
-      price: formData.price,
-      displayOrder: formData.displayOrder,
-      availableFrom: formData.availableFrom || null,
-      availableUntil: formData.availableUntil || null,
-      inventoryLinks: formData.inventoryLinks,
-    };
+    setSubmitting(true);
 
     const formDataToSend = new FormData();
-    formDataToSend.append("request", JSON.stringify(payload));
-    if (imageFile) formDataToSend.append("image", imageFile);
+    formDataToSend.append("name", formData.name.trim());
+    formDataToSend.append("categoryId", formData.categoryId.toString());
+    formDataToSend.append("price", formData.price.toString());
+    formDataToSend.append("displayOrder", formData.displayOrder.toString());
+
+    if (formData.description?.trim())
+      formDataToSend.append("description", formData.description.trim());
+
+    if (formData.availableFrom)
+      formDataToSend.append("availableFrom", formData.availableFrom);
+    if (formData.availableUntil)
+      formDataToSend.append("availableUntil", formData.availableUntil);
+
+    formDataToSend.append(
+      "inventoryLinks",
+      JSON.stringify(formData.inventoryLinks || []),
+    );
+
+    if (imageFile) {
+      formDataToSend.append("image", imageFile);
+    }
 
     try {
       if (editingItem) {
@@ -211,31 +240,50 @@ export default function MenuPage() {
         await menuService.createMenuItem(formDataToSend);
         toast.success("Menu item created successfully!");
       }
-      const updatedMenu = await menuService.getMenu(); // force fresh fetch
-      console.log(
-        "🔍 Debug - Newly saved menu items:",
-        updatedMenu.data?.map((item: any) => ({
-          name: item.name,
-          imageFileName: item.imageFileName,
-          fullUrl: getFullImageUrl(item.imageFileName ?? item.imageUrl),
-        })),
-      );
+
       setShowModal(false);
-      await fetchMenu();
+      // Refresh BOTH lists
+      await Promise.all([fetchMenu(), fetchCategories()]);
+      // Reset form
+      setImageFile(null);
+      setImagePreview(null);
     } catch (err: any) {
-      console.error(err);
       toast.error(err.response?.data?.message || "Failed to save menu item");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (categorySubmitting || !categoryForm.name.trim()) return;
+
+    setCategorySubmitting(true);
+
+    try {
+      await categoryService.create(categoryForm);
+      toast.success("Category created successfully!");
+      setShowCategoryModal(false);
+      setCategoryForm({ name: "", description: "", displayOrder: 0 });
+      await fetchCategories(); // Refresh dropdown
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create category");
+    } finally {
+      setCategorySubmitting(false);
     }
   };
 
   const handleDeactivate = async (id: number) => {
     if (!confirm("Deactivate this menu item?")) return;
+
     try {
       await menuService.deleteMenuItem(id);
       toast.success("Menu item deactivated");
       fetchMenu();
-    } catch {
-      toast.error("Failed to deactivate");
+    } catch (err: any) {
+      toast.error(
+        err.response?.data?.message || "Failed to deactivate menu item",
+      );
     }
   };
 
@@ -244,16 +292,14 @@ export default function MenuPage() {
       header: "Image",
       accessor: (item: MenuItem) => {
         const url = getFullImageUrl(item.imageFileName ?? item.imageUrl);
-        console.log(`Image URL for ${item.name}:`, url); // debug
         return (
-          <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden border">
+          <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden border border-zinc-200">
             {url ? (
               <img
                 src={url}
                 alt={item.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  console.error(`Failed to load image for ${item.name}:`, url);
                   (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
@@ -267,8 +313,14 @@ export default function MenuPage() {
       },
     },
     { header: "Name", accessor: "name" as const },
-    { header: "Category", accessor: "category" as const },
-    { header: "Price", accessor: (item: MenuItem) => `₱${item.price}` },
+    {
+      header: "Category",
+      accessor: (item: MenuItem) => item.categoryName || "Uncategorized",
+    },
+    {
+      header: "Price",
+      accessor: (item: MenuItem) => `₱${item.price.toFixed(2)}`,
+    },
     {
       header: "Status",
       accessor: (item: MenuItem) => (
@@ -281,7 +333,7 @@ export default function MenuPage() {
 
   const actions = (item: MenuItem) => (
     <div className="flex gap-2">
-      <Button variant="outline" size="sm" onClick={() => openModal(item)}>
+      <Button variant="outline" size="sm" onClick={() => openMenuModal(item)}>
         <Edit className="w-4 h-4" />
       </Button>
       <Button
@@ -298,10 +350,16 @@ export default function MenuPage() {
     <div className="p-4 sm:p-6 lg:p-8">
       <PageHeader
         title="Menu Management"
+        description="Manage your café's menu items, pricing, availability, and ingredient links."
         actions={
-          <Button onClick={() => openModal()}>
-            <Plus className="w-4 h-4 mr-2" /> Add New Item
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={() => openMenuModal()}>
+              <Plus className="w-4 h-4 mr-2" /> Add New Item
+            </Button>
+            <Button variant="outline" onClick={openCategoryModal}>
+              <Plus className="w-4 h-4 mr-2" /> Manage Categories
+            </Button>
+          </div>
         }
       />
 
@@ -310,24 +368,26 @@ export default function MenuPage() {
         columns={columns}
         loading={loading}
         actions={actions}
-        emptyMessage="No menu items found."
+        emptyMessage="No menu items found. Add your first item above."
       />
 
+      {/* Menu Item Create/Edit Modal */}
       <ModalShell
         open={showModal}
         title={editingItem ? "Edit Menu Item" : "New Menu Item"}
-        description="Manage menu details, availability, and ingredient links."
+        description="Manage details, availability windows, and ingredient consumption."
         onClose={() => setShowModal(false)}
         className="max-w-2xl"
       >
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleMenuSubmit} className="space-y-6">
+          {/* Visual Identity */}
           <FormSection
-            title="Visual identity"
-            description="Add a menu image..."
+            title="Visual Identity"
+            description="Upload a high-quality image for the menu (recommended 800x800px)"
           >
-            <div className="rounded-[1.75rem] border border-dashed border-zinc-300 bg-muted/20 p-5 text-center dark:border-zinc-700">
+            <div className="rounded-[1.75rem] border border-dashed border-zinc-300 bg-muted/20 p-6 text-center">
               <div className="mx-auto flex max-w-md flex-col items-center gap-4">
-                <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl bg-white text-zinc-400 shadow-sm dark:bg-zinc-900">
+                <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-3xl bg-white shadow-sm">
                   {imagePreview ? (
                     <img
                       src={imagePreview}
@@ -335,7 +395,7 @@ export default function MenuPage() {
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    <ImageIcon className="h-12 w-12" />
+                    <ImageIcon className="h-16 w-16 text-zinc-400" />
                   )}
                 </div>
                 <input
@@ -344,112 +404,152 @@ export default function MenuPage() {
                   onChange={handleImageChange}
                   className="block w-full text-sm text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-700"
                 />
+                <p className="text-xs text-muted-foreground">
+                  PNG, JPG or GIF • Max 5MB
+                </p>
               </div>
             </div>
           </FormSection>
 
-          <FormSection
-            title="Item details"
-            description="Name, price, and menu ordering information."
-          >
+          {/* Item Details FormSection */}
+          <FormSection title="Item Details">
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Item name">
+              <FormField
+                label="Item Name"
+                description="Clear, recognizable name"
+              >
                 <Input
-                  placeholder="Iced Latte"
+                  placeholder="Iced Caramel Latte"
                   value={formData.name}
                   onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
+                    setFormData((prev) => ({ ...prev, name: e.target.value }))
                   }
                   required
                 />
               </FormField>
-              <FormField label="Category">
-                <Input
-                  placeholder="Coffee"
-                  value={formData.category}
+
+              {/* ← REPLACE WITH THIS BLOCK */}
+              <FormField
+                label="Category"
+                description="Select from existing categories"
+              >
+                <select
+                  value={formData.categoryId}
                   onChange={(e) =>
-                    setFormData({ ...formData, category: e.target.value })
+                    setFormData((prev) => ({
+                      ...prev,
+                      categoryId: parseInt(e.target.value),
+                    }))
                   }
+                  className="h-10 w-full rounded-2xl border px-3"
                   required
-                />
+                >
+                  <option value={0}>Select Category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
               </FormField>
-              <FormField label="Price">
+
+              <FormField label="Price (₱)" description="Base selling price">
                 <Input
                   type="number"
-                  placeholder="120"
+                  step="0.01"
+                  placeholder="149.00"
                   value={formData.price}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
+                    setFormData((prev) => ({
+                      ...prev,
                       price: parseFloat(e.target.value) || 0,
-                    })
+                    }))
                   }
                   required
                 />
               </FormField>
-              <FormField label="Display order">
+
+              <FormField
+                label="Display Order"
+                description="Position in menu list"
+              >
                 <Input
                   type="number"
                   placeholder="1"
                   value={formData.displayOrder}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
+                    setFormData((prev) => ({
+                      ...prev,
                       displayOrder: parseInt(e.target.value) || 0,
-                    })
+                    }))
                   }
                 />
               </FormField>
             </div>
-            <FormField label="Description">
+
+            <FormField
+              label="Description"
+              description="Optional short description"
+            >
               <Input
-                placeholder="Smooth espresso with milk and ice"
+                placeholder="Rich espresso with steamed milk and caramel drizzle"
                 value={formData.description}
                 onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
+                  setFormData((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
                 }
               />
             </FormField>
           </FormSection>
 
+          {/* Availability */}
           <FormSection
             title="Availability"
-            description="Optional time windows."
+            description="Optional time-based availability (24-hour format)"
           >
             <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Available from">
+              <FormField label="Available From">
                 <Input
                   type="time"
                   value={formData.availableFrom}
                   onChange={(e) =>
-                    setFormData({ ...formData, availableFrom: e.target.value })
+                    setFormData((prev) => ({
+                      ...prev,
+                      availableFrom: e.target.value,
+                    }))
                   }
                 />
               </FormField>
-              <FormField label="Available until">
+              <FormField label="Available Until">
                 <Input
                   type="time"
                   value={formData.availableUntil}
                   onChange={(e) =>
-                    setFormData({ ...formData, availableUntil: e.target.value })
+                    setFormData((prev) => ({
+                      ...prev,
+                      availableUntil: e.target.value,
+                    }))
                   }
                 />
               </FormField>
             </div>
           </FormSection>
 
+          {/* Inventory Links */}
           <FormSection
-            title="Inventory ingredients"
-            description="Link the ingredients used to produce one unit of this menu item."
+            title="Inventory Ingredients"
+            description="Link ingredients consumed per unit sold"
           >
             <div className="space-y-4">
               {formData.inventoryLinks.map((link, index) => (
                 <div
                   key={index}
-                  className="rounded-2xl border border-border/60 bg-background p-4"
+                  className="rounded-2xl border p-4 bg-zinc-50 dark:bg-zinc-900"
                 >
-                  <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                    <FormField label="Inventory ingredient">
+                  <div className="grid gap-3 md:grid-cols-[2fr,1fr,auto]">
+                    <FormField label="Ingredient">
                       <select
                         value={link.inventoryItemId}
                         onChange={(e) =>
@@ -459,17 +559,17 @@ export default function MenuPage() {
                             parseInt(e.target.value),
                           )
                         }
-                        className="h-10 w-full rounded-2xl border border-input bg-background px-3 py-2 text-sm"
+                        className="h-10 w-full rounded-2xl border px-3"
                       >
-                        {ingredientOptions.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} • {item.currentStock} {item.unit}
+                        {ingredientOptions.map((inv) => (
+                          <option key={inv.id} value={inv.id}>
+                            {inv.name} ({inv.currentStock} {inv.unit})
                           </option>
                         ))}
                       </select>
                     </FormField>
 
-                    <FormField label="Qty per unit">
+                    <FormField label="Qty per Unit">
                       <Input
                         type="number"
                         step="0.001"
@@ -488,6 +588,7 @@ export default function MenuPage() {
                       type="button"
                       variant="outline"
                       onClick={() => removeInventoryLink(index)}
+                      className="mt-6"
                     >
                       Remove
                     </Button>
@@ -499,22 +600,103 @@ export default function MenuPage() {
             <Button
               type="button"
               variant="outline"
-              className="mt-3 w-full"
+              className="mt-4 w-full"
               onClick={addInventoryLink}
             >
-              + Add Ingredient
+              + Add Ingredient Link
             </Button>
           </FormSection>
 
-          <div className="flex gap-3 pt-2">
-            <Button type="submit" className="flex-1">
-              {editingItem ? "Update item" : "Create item"}
+          <div className="flex gap-3 pt-4">
+            <Button type="submit" className="flex-1" disabled={submitting}>
+              {submitting
+                ? "Saving..."
+                : editingItem
+                  ? "Update Item"
+                  : "Create Item"}
             </Button>
             <Button
               type="button"
               variant="outline"
               className="flex-1"
               onClick={() => setShowModal(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </ModalShell>
+
+      {/* Category Creation Modal */}
+      <ModalShell
+        open={showCategoryModal}
+        title="Create New Category"
+        description="Categories help organize your menu items."
+        onClose={() => setShowCategoryModal(false)}
+        className="max-w-md"
+      >
+        <form onSubmit={handleCreateCategory} className="space-y-6">
+          <FormSection title="Category Details">
+            <FormField
+              label="Category Name"
+              description="e.g. Coffee, Pastries"
+            >
+              <Input
+                placeholder="Coffee"
+                value={categoryForm.name}
+                onChange={(e) =>
+                  setCategoryForm({ ...categoryForm, name: e.target.value })
+                }
+                required
+              />
+            </FormField>
+
+            <FormField label="Description" description="Optional">
+              <Input
+                placeholder="Hot and cold coffee beverages"
+                value={categoryForm.description}
+                onChange={(e) =>
+                  setCategoryForm({
+                    ...categoryForm,
+                    description: e.target.value,
+                  })
+                }
+              />
+            </FormField>
+
+            <FormField
+              label="Display Order"
+              description="Position in menu (optional)"
+            >
+              <Input
+                type="number"
+                placeholder="1"
+                value={categoryForm.displayOrder}
+                onChange={(e) =>
+                  setCategoryForm({
+                    ...categoryForm,
+                    displayOrder: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
+            </FormField>
+          </FormSection>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={categorySubmitting}
+            >
+              {categorySubmitting ? "Creating..." : "Create Category"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowCategoryModal(false)}
+              disabled={categorySubmitting}
             >
               Cancel
             </Button>
