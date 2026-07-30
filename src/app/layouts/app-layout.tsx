@@ -28,10 +28,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["Admin", "Manager", "Cashier"] },
   { label: "POS Terminal", href: "/cashier", icon: Coffee, roles: ["Admin", "Manager", "Cashier"] },
   { label: "Inventory", href: "/inventory", icon: Boxes, roles: ["Admin", "Manager"] },
-
   { label: "Menu Management", href: "/menu", icon: Coffee, roles: ["Admin", "Manager"] },
-  
-  // ← Sub-button under Menu Management
   { 
     label: "Categories", 
     href: "/categories", 
@@ -39,7 +36,6 @@ const navItems: NavItem[] = [
     roles: ["Admin", "Manager"],
     parent: "Menu Management" 
   },
-
   { label: "Manager Hub", href: "/manager", icon: BarChart3, roles: ["Admin", "Manager"] },
   { label: "Staff Management", href: "/users", icon: Users, roles: ["Admin"] },
 ];
@@ -70,7 +66,6 @@ function NavLinks({
   const mainItems = filteredNavItems.filter((item) => !item.parent);
   const subItemsMap = new Map<string, NavItem[]>();
 
-  // Group sub-items by their parent
   filteredNavItems.forEach((item) => {
     if (item.parent) {
       if (!subItemsMap.has(item.parent)) {
@@ -81,7 +76,6 @@ function NavLinks({
   });
 
   if (isCollapsed) {
-    // Collapsed sidebar - show all as icons with tooltips
     return (
       <nav className="flex flex-col items-center gap-3">
         {filteredNavItems.map((item) => {
@@ -120,7 +114,6 @@ function NavLinks({
     );
   }
 
-  // Expanded sidebar with sub-items
   return (
     <nav className="space-y-1">
       {mainItems.map((item) => {
@@ -130,7 +123,6 @@ function NavLinks({
 
         return (
           <div key={item.href}>
-            {/* Main Item */}
             <Link
               to={item.href}
               onClick={onNavigate}
@@ -141,16 +133,12 @@ function NavLinks({
                   : "text-zinc-600 hover:bg-zinc-100/80 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900/70 dark:hover:text-white"
               )}
             >
-              {isActive && (
-                <span className="absolute -left-1 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-amber-500" />
-              )}
               <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 group-hover:bg-white dark:bg-zinc-900 dark:text-zinc-400 dark:group-hover:bg-zinc-800">
                 <Icon className="h-4 w-4" />
               </span>
               <span className="flex-1">{item.label}</span>
             </Link>
 
-            {/* Sub-items (indented) */}
             {subs.length > 0 && (
               <div className="ml-8 mt-1 space-y-1 border-l border-zinc-200 dark:border-zinc-800 pl-4">
                 {subs.map((sub) => {
@@ -198,16 +186,24 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
 }
 
 export default function AppLayout() {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const location = useLocation();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+  // ===== OPTION A FIX =====
+  // Read user info from localStorage (same source as ProtectedRoute & LoginForm)
+  const user = {
+    fullName: localStorage.getItem("fullName") || "User",
+    role: localStorage.getItem("userRole") || "",
+  };
+  // ========================
+
   const filteredNavItems = navItems.filter((item) =>
-    item.roles.includes(user?.role || ""),
+    item.roles.includes(user.role),
   );
 
-  const accentClass = roleAccent[user?.role ?? ""] ?? "from-zinc-900 to-zinc-700";
+  const accentClass = roleAccent[user.role] ?? "from-zinc-900 to-zinc-700";
 
   useEffect(() => {
     setIsMobileNavOpen(false);
@@ -282,8 +278,8 @@ export default function AppLayout() {
                   <UserCog className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{user?.fullName || "User"}</p>
-                  <p className="text-xs capitalize text-zinc-500">{user?.role}</p>
+                  <p className="truncate font-medium">{user.fullName}</p>
+                  <p className="text-xs capitalize text-zinc-500">{user.role}</p>
                 </div>
               </div>
             </div>
@@ -300,7 +296,7 @@ export default function AppLayout() {
                 <UserCog className="h-4 w-4" />
               </div>
               <span className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 whitespace-nowrap rounded-xl bg-zinc-950 px-3 py-2 text-xs font-medium text-white opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 dark:bg-white dark:text-zinc-950 z-50">
-                {user?.fullName || "User"} · {user?.role}
+                {user.fullName} · {user.role}
               </span>
             </div>
           ) : null}
@@ -335,7 +331,7 @@ export default function AppLayout() {
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600">
               <img
-                src="/StreetSidePhoto.jpg"
+                src="/StreetSidePhoto.png"
                 alt="StreetSide Cafe"
                 className="h-7 w-7 object-contain"
               />
@@ -380,12 +376,11 @@ export default function AppLayout() {
             aria-label="Close navigation overlay"
           />
           <aside className="absolute left-0 top-0 flex h-full w-[86vw] max-w-sm flex-col border-r border-white/60 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.2)] dark:border-white/10 dark:bg-zinc-950">
-            {/* Mobile Header */}
             <div className="border-b border-zinc-200/80 p-5 dark:border-zinc-800">
               <div className="flex items-center gap-3 rounded-3xl bg-gradient-to-br from-amber-500 to-orange-600 p-4 text-white shadow-lg shadow-amber-500/20">
                 <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white/15">
                   <img
-                    src="/StreetSidePhoto.jpg"
+                    src="/StreetSidePhoto.png"
                     alt="StreetSide Cafe"
                     className="h-9 w-9 object-contain"
                   />
@@ -416,8 +411,8 @@ export default function AppLayout() {
                   <UserCog className="h-4 w-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{user?.fullName || "User"}</p>
-                  <p className="text-xs capitalize text-zinc-500">{user?.role}</p>
+                  <p className="truncate text-sm font-medium">{user.fullName}</p>
+                  <p className="text-xs capitalize text-zinc-500">{user.role}</p>
                 </div>
               </div>
               <Button

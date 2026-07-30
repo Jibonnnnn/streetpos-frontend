@@ -89,6 +89,29 @@ export interface OrderResponse {
   items: OrderItemResponse[];
 }
 
+// === NEW TYPES FOR ORDERS ===
+export interface CreateOrderRequest {
+  tableNumber?: string;
+  customerNotes?: string;
+  items: OrderItemRequest[];
+}
+
+export interface OrderItemRequest {
+  menuItemId: number;
+  quantity: number;
+  selectedModifierOptionIds?: number[];
+  itemNotes?: string;
+}
+
+export interface CheckoutRequest {
+  orderId: number;
+  paymentMethod: 'Cash' | 'GCash' | 'Maya' | 'Card' | 'Other';
+  amountTendered?: number;
+  transactionId?: string;
+  notes?: string;
+}
+
+// === INVENTORY ===
 export interface InventoryItemResponse {
   id: number;
   name: string;
@@ -102,6 +125,7 @@ export interface InventoryItemResponse {
   createdAt: string;
 }
 
+// === OTHER TYPES ===
 export interface User {
   id: number;
   employeeId?: string;
@@ -140,11 +164,10 @@ export interface Category {
 }
 
 export type ActivityLogType =
+  | "Login"
   | "InventoryAddition"
   | "InventoryDeduction"
-  | "TimeClockIn"
-  | "TimeClockOut"
-  | "PurchaseOrder"
+  | "OrderCompleted"
   | "Other";
  
 export interface ActivityLogEntry {
@@ -155,4 +178,15 @@ export interface ActivityLogEntry {
   quantity?: number;
   unit?: string;
   createdAt: string;
+}
+
+export interface DashboardResponse {
+  todaySales: number;
+  ordersToday: number;
+  openOrders: number;
+  lowStockItems: number;
+  activeStaff: number;
+  topSellingItems: TopSellingItem[];
+  activityLog?: ActivityLogEntry[];
+  lastUpdated: string;
 }

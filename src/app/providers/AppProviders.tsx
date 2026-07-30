@@ -1,15 +1,30 @@
-import { CartProvider } from "@/contexts/CartContext";
-import { Toaster } from "sonner";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { Toaster } from 'sonner';
+import { CartProvider } from '@/contexts/CartContext';
+import type { ReactNode } from 'react';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10,   // 10 minutes
+      retry: 2,
+    },
+  },
+});
 
 type AppProvidersProps = {
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export function AppProviders({ children }: AppProvidersProps) {
   return (
-    <CartProvider>
-      <Toaster position="top-center" richColors closeButton />
-      {children}
-    </CartProvider>
+    <QueryClientProvider client={queryClient}>
+      <CartProvider>
+        <Toaster position="top-center" richColors closeButton />
+        {children}
+      </CartProvider>
+    </QueryClientProvider>
   );
 }

@@ -1,223 +1,248 @@
-import { useEffect, useMemo, useState } from 'react';
-import { connectToDashboardHub, disconnectFromDashboardHub } from '@/lib/api';
-import { dashboardService } from '@/services/dashboard.service';
+import { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { BadgePill } from "@/components/common/BadgePill";
+import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
+import { ActivityLogPanel } from "@/components/dashboard/ActivityLogPanel";
+import { dashboardService } from "@/services/dashboard.service";
 import {
-  Coffee,
   TrendingUp,
+  Coffee,
   Clock,
   AlertTriangle,
-  RefreshCw,
   Users,
-  Flame,
-  Radio,
-} from 'lucide-react';
-import { PageHeader } from '@/components/layout';
-import { StatCard } from '@/components/common/StatCard';
-import { BadgePill } from '@/components/common/BadgePill';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ActivityLogPanel } from '@/components/dashboard/ActivityLogPanel';
-import type { DashboardResponse, ActivityLogEntry } from '@/types';
-import { toast } from 'sonner';
-import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
+  RefreshCw,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+import { toast } from "sonner";
 import {
-  Bar,
   BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
+  Bar,
   XAxis,
   YAxis,
-} from 'recharts';
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
+import type { DashboardResponse } from "@/types";
 
-const rankStyles = [
-  'bg-amber-500/15 text-amber-600 dark:text-amber-300',
-  'bg-zinc-500/15 text-zinc-600 dark:text-zinc-300',
-  'bg-orange-500/15 text-orange-600 dark:text-orange-300',
-];
-
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-
-  return (
-    <div className="rounded-2xl border border-border/60 bg-white/95 px-4 py-3 text-sm shadow-lg backdrop-blur-sm dark:bg-zinc-900/95">
-      <p className="mb-1 font-medium tracking-tight">{label}</p>
-      <p className="text-muted-foreground">
-        Revenue: <span className="font-semibold text-foreground">₱{Number(payload[0].value).toFixed(2)}</span>
-      </p>
-    </div>
-  );
-}
-
-export default function Dashboard() {
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
-
-  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
-  const [activityLoading, setActivityLoading] = useState(true);
-  const [activityErrored, setActivityErrored] = useState(false);
 
   const fetchDashboard = async () => {
     try {
       setLoading(true);
       const res = await dashboardService.getDashboard();
-      setDashboard(res.data);
-    } catch (err: any) {
-      console.error('Failed to fetch dashboard:', err);
-      toast.error('Could not load dashboard data');
+      setData(res.data);
+      setIsLive(true);
+    } catch (err) {
+      toast.error("Failed to load dashboard");
+      setIsLive(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchActivityLog = async () => {
-    try {
-      setActivityLoading(true);
-      setActivityErrored(false);
-      const res = await dashboardService.getActivityLog(20);
-      setActivityLog(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      // Expected until the backend ships GET /dashboard/activity-log
-      console.error('Failed to fetch activity log:', err);
-      setActivityErrored(true);
-    } finally {
-      setActivityLoading(false);
-    }
-  };
-
   useEffect(() => {
     fetchDashboard();
-    fetchActivityLog();
-
-    let isMounted = true;
-
-    const setupRealTime = async () => {
-      try {
-        await connectToDashboardHub((updatedData: DashboardResponse) => {
-          if (isMounted) {
-            setDashboard(updatedData);
-            setIsLive(true);
-            toast.success('📡 Dashboard Updated Live', {
-              description: 'New data received',
-              duration: 2000,
-            });
-          }
-        });
-      } catch (err) {
-        console.error('SignalR connection failed:', err);
-      }
-    };
-
-    setupRealTime();
-
-    return () => {
-      isMounted = false;
-      void disconnectFromDashboardHub();
-    };
   }, []);
 
-  const chartData = useMemo(() => {
-    if (!dashboard) return [];
-    return [...dashboard.topSellingItems]
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 6)
-      .map((item) => ({
-        name: item.name.length > 12 ? `${item.name.slice(0, 12)}…` : item.name,
-        revenue: item.revenue,
-      }));
-  }, [dashboard]);
+  if (loading) return <DashboardSkeleton />;
 
-  const rankedTopItems = useMemo(() => {
-    if (!dashboard) return [];
-    return [...dashboard.topSellingItems].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
-  }, [dashboard]);
-
-  const maxQty = useMemo(
-    () => Math.max(1, ...rankedTopItems.map((item) => item.quantitySold)),
-    [rankedTopItems],
-  );
-
-  if (loading || !dashboard) {
-    return <DashboardSkeleton />;
-  }
+  const stats = [
+    {
+      label: "Today's Sales",
+      value: `₱${(data?.todaySales ?? 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+      })}`,
+      icon: TrendingUp,
+      accent: "from-amber-500 to-orange-600",
+      bg: "bg-amber-50 dark:bg-amber-950/30",
+    },
+    {
+      label: "Orders Today",
+      value: data?.ordersToday ?? 0,
+      icon: Coffee,
+      accent: "from-blue-500 to-cyan-600",
+      bg: "bg-blue-50 dark:bg-blue-950/30",
+    },
+    {
+      label: "Open Orders",
+      value: data?.openOrders ?? 0,
+      icon: Clock,
+      accent: "from-violet-500 to-purple-600",
+      bg: "bg-violet-50 dark:bg-violet-950/30",
+    },
+    {
+      label: "Low Stock Items",
+      value: data?.lowStockItems ?? 0,
+      icon: AlertTriangle,
+      accent: "from-rose-500 to-red-600",
+      bg: "bg-rose-50 dark:bg-rose-950/30",
+    },
+    {
+      label: "Active Staff",
+      value: data?.activeStaff ?? 0,
+      icon: Users,
+      accent: "from-emerald-500 to-teal-600",
+      bg: "bg-emerald-50 dark:bg-emerald-950/30",
+    },
+  ];
 
   return (
-    <div className="mx-auto max-w-screen-2xl space-y-6 p-4 sm:space-y-8 sm:p-6 lg:p-8">
-      <PageHeader
-        title="Live Operations Dashboard"
-        description="Real-time business insights"
-        actions={
-          <div className="flex items-center gap-3">
-            <BadgePill tone={isLive ? 'success' : 'neutral'} className="gap-1.5">
-              <Radio className={`h-3 w-3 ${isLive ? 'animate-pulse' : ''}`} />
-              {isLive ? 'Live' : 'Connecting'}
-            </BadgePill>
-            <Button variant="outline" className="gap-2 rounded-3xl" onClick={fetchDashboard}>
-              <RefreshCw className="h-4 w-4" /> Refresh Now
-            </Button>
-          </div>
-        }
-      />
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">
+            Live Operations Dashboard
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            Real-time business insights for StreetSide Cafe
+          </p>
+        </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-5">
-        <StatCard title="Today's Sales" value={`₱${dashboard.todaySales.toFixed(2)}`} icon={TrendingUp} />
-        <StatCard title="Orders Today" value={dashboard.ordersToday} icon={Coffee} />
-        <StatCard
-          title="Open Orders"
-          value={dashboard.openOrders}
-          icon={Clock}
-          changeColor="text-amber-600"
-        />
-        <StatCard
-          title="Low Stock Items"
-          value={dashboard.lowStockItems}
-          icon={AlertTriangle}
-          changeColor="text-orange-600"
-        />
-        <StatCard title="Active Staff" value={dashboard.activeStaff} icon={Users} />
+        <div className="flex items-center gap-3">
+          <BadgePill
+            tone={isLive ? "success" : "danger"}
+            className="gap-1.5 px-3 py-1.5"
+          >
+            {isLive ? (
+              <Wifi className="h-3.5 w-3.5" />
+            ) : (
+              <WifiOff className="h-3.5 w-3.5" />
+            )}
+            {isLive ? "Live" : "Offline"}
+          </BadgePill>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-2xl gap-2"
+            onClick={fetchDashboard}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <Card
+              key={stat.label}
+              className="overflow-hidden border-border/60 bg-white/80 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-zinc-950/50"
+            >
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between">
+                  <div
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${stat.accent} text-white shadow-sm`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
+                    {stat.label}
+                  </p>
+                  <p className="mt-2 font-heading text-3xl font-semibold tracking-tight">
+                    {stat.value}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Bottom Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        {/* Revenue chart */}
-        <Card className="border-border/60 bg-white/80 shadow-sm dark:bg-zinc-900/75 lg:col-span-3">
-          <CardContent className="p-6 md:p-7">
-            <div className="mb-6 flex items-center justify-between gap-4">
+        {/* Top Selling Items - Interactive Chart */}
+        <Card className="border-border/60 bg-white/80 shadow-sm lg:col-span-3 dark:bg-zinc-950/50">
+          <CardContent className="p-6">
+            <div className="mb-6 flex items-center justify-between">
               <div>
-                <h2 className="font-heading text-xl font-semibold tracking-tight">Revenue by item</h2>
-                <p className="text-sm text-muted-foreground">Top 6 sellers, ranked by revenue</p>
+                <h2 className="font-heading text-xl font-semibold tracking-tight">
+                  Top Selling Items
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Ranked by revenue today
+                </p>
               </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300">
-                <Flame className="h-4 w-4" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/40">
+                <TrendingUp className="h-5 w-5" />
               </div>
             </div>
 
-            {chartData.length === 0 ? (
-              <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-sm text-muted-foreground">
-                No sales recorded yet
+            {(data?.topSellingItems ?? []).length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
+                No sales data yet today.
               </div>
             ) : (
-              <div className="h-64 w-full">
+              <div className="h-[320px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
+                  <BarChart
+                    data={data?.topSellingItems ?? []}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
                     <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 12 }}
-                      tickLine={false}
+                      type="number"
+                      tickFormatter={(value) => `₱${value}`}
                       axisLine={false}
-                      className="fill-muted-foreground"
+                      tickLine={false}
+                      tick={{ fill: "#71717a", fontSize: 12 }}
                     />
                     <YAxis
-                      tick={{ fontSize: 12 }}
-                      tickLine={false}
+                      type="category"
+                      dataKey="name"
+                      width={110}
                       axisLine={false}
-                      className="fill-muted-foreground"
-                      width={48}
+                      tickLine={false}
+                      tick={{ fill: "#3f3f46", fontSize: 13, fontWeight: 500 }}
                     />
-                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(217,119,6,0.06)' }} />
-                    <Bar dataKey="revenue" radius={[10, 10, 0, 0]} fill="#d97706" maxBarSize={44} />
+                    <Tooltip
+                      cursor={{ fill: "rgba(251, 191, 36, 0.08)" }}
+                      contentStyle={{
+                        borderRadius: "16px",
+                        border: "1px solid #e4e4e7",
+                        boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+                      }}
+                      formatter={(value) => {
+                        const num =
+                          typeof value === "number"
+                            ? value
+                            : Number(value) || 0;
+                        return [
+                          `₱${num.toLocaleString("en-PH", {
+                            minimumFractionDigits: 2,
+                          })}`,
+                          "Revenue",
+                        ];
+                      }}
+                      labelFormatter={(label) => String(label)}
+                    />
+                    <Bar dataKey="revenue" radius={[0, 10, 10, 0]} barSize={28}>
+                      {(data?.topSellingItems ?? []).map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={
+                            index === 0
+                              ? "#f59e0b" // amber-500 for #1
+                              : index === 1
+                                ? "#fbbf24" // amber-400
+                                : "#fcd34d" // amber-300
+                          }
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -225,61 +250,38 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Activity Log — inventory changes, time clock, purchases */}
-        <ActivityLogPanel entries={activityLog} loading={activityLoading} errored={activityErrored} />
+        {/* Activity Log */}
+        <Card className="border-border/60 bg-white/80 shadow-sm lg:col-span-2 dark:bg-zinc-950/50">
+          <CardContent className="p-6">
+            <div className="mb-6">
+              <h2 className="font-heading text-xl font-semibold tracking-tight">
+                Activity Log
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Logins, inventory & completed orders
+              </p>
+            </div>
+
+            <ActivityLogPanel
+              entries={data?.activityLog ?? []}
+              loading={loading}
+            />
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <div className={`h-1.5 w-1.5 rounded-full ${isLive ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
-        Last updated: {new Date(dashboard.lastUpdated).toLocaleString()}
-      </div>
-
-      {/* Top Selling ranked list */}
-      <Card className="border-border/60 bg-white/80 shadow-sm dark:bg-zinc-900/75">
-        <CardContent className="p-6 md:p-7">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-heading text-xl font-semibold tracking-tight">Top selling items</h2>
-              <p className="text-sm text-muted-foreground">Last 7 days, ranked by revenue</p>
-            </div>
-          </div>
-
-          {rankedTopItems.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 py-12 text-center text-sm text-muted-foreground">
-              No sales recorded yet
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {rankedTopItems.map((item, index) => (
-                <div
-                  key={item.name}
-                  className="flex items-center gap-4 rounded-2xl border border-border/60 bg-zinc-50 p-4 transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md dark:bg-zinc-950/50"
-                >
-                  <div
-                    className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl text-sm font-semibold ${rankStyles[index] ?? 'bg-zinc-500/10 text-zinc-500 dark:text-zinc-400'}`}
-                  >
-                    {index + 1}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate font-medium tracking-tight">{item.name}</p>
-                      <p className="whitespace-nowrap font-semibold">₱{item.revenue.toFixed(2)}</p>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-600"
-                        style={{ width: `${(item.quantitySold / maxQty) * 100}%` }}
-                      />
-                    </div>
-                    <p className="mt-1.5 text-xs text-muted-foreground">{item.quantitySold} sold</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Last Updated */}
+      {data?.lastUpdated && (
+        <p className="text-center text-xs text-muted-foreground">
+          Last updated{" "}
+          {new Date(data.lastUpdated).toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        </p>
+      )}
     </div>
   );
 }

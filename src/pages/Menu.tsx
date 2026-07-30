@@ -10,7 +10,7 @@ import type {
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Edit, Trash2, ImageIcon } from "lucide-react";
+import { Plus, Edit, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/layout";
@@ -78,10 +78,10 @@ export default function MenuPage() {
   const fetchMenu = async () => {
     try {
       setLoading(true);
-      const res = await menuService.getMenu();
+      const res = await menuService.getMenu(true); // ← includeInactive = true
       setMenuItems(res.data || []);
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to load menu items");
+    } catch (err) {
+      toast.error("Failed to load menu items");
     } finally {
       setLoading(false);
     }
@@ -274,16 +274,27 @@ export default function MenuPage() {
   };
 
   const handleDeactivate = async (id: number) => {
-    if (!confirm("Deactivate this menu item?")) return;
+    if (
+      !confirm("Disable this menu item? It will no longer appear in the POS.")
+    )
+      return;
 
     try {
       await menuService.deleteMenuItem(id);
-      toast.success("Menu item deactivated");
+      toast.success("Menu item disabled");
       fetchMenu();
     } catch (err: any) {
-      toast.error(
-        err.response?.data?.message || "Failed to deactivate menu item",
-      );
+      toast.error(err.response?.data?.message || "Failed to disable menu item");
+    }
+  };
+
+  const handleActivate = async (id: number) => {
+    try {
+      await menuService.activateMenuItem(id);
+      toast.success("Menu item enabled");
+      fetchMenu();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to enable menu item");
     }
   };
 
@@ -325,7 +336,7 @@ export default function MenuPage() {
       header: "Status",
       accessor: (item: MenuItem) => (
         <BadgePill tone={item.isActive ? "success" : "danger"}>
-          {item.isActive ? "Active" : "Inactive"}
+          {item.isActive ? "Active" : "Disabled"}
         </BadgePill>
       ),
     },
@@ -336,13 +347,26 @@ export default function MenuPage() {
       <Button variant="outline" size="sm" onClick={() => openMenuModal(item)}>
         <Edit className="w-4 h-4" />
       </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => handleDeactivate(item.id)}
-      >
-        <Trash2 className="w-4 h-4" />
-      </Button>
+
+      {item.isActive ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleDeactivate(item.id)}
+          className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+        >
+          Disable
+        </Button>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleActivate(item.id)}
+          className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+        >
+          Enable
+        </Button>
+      )}
     </div>
   );
 

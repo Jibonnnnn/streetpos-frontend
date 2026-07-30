@@ -1,7 +1,8 @@
 import api from "@/lib/api";
 
 export const menuService = {
-  getMenu: () => api.get("/menu"),
+  getMenu: (includeInactive = false) =>
+    api.get(`/menu?includeInactive=${includeInactive}`),
   getMenuItem: (id: number) => api.get(`/menu/${id}`),
 
   createMenuItem: async (formData: FormData) => {
@@ -20,5 +21,6 @@ export const menuService = {
     });
   },
 
-  deleteMenuItem: (id: number) => api.delete(`/menu/${id}`),
+  deleteMenuItem: (id: number) => api.delete(`/menu/${id}`), // Disable
+  activateMenuItem: (id: number) => api.patch(`/menu/${id}/activate`), // Enable
 };
