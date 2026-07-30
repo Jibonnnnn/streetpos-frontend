@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { Percent } from "lucide-react";
 import {
   LayoutDashboard,
   Coffee,
@@ -35,6 +36,13 @@ const navItems: NavItem[] = [
     icon: Tags, 
     roles: ["Admin", "Manager"],
     parent: "Menu Management" 
+  },
+  {
+    label: "Promotions",
+    href: "/promotions",
+    icon: Percent,          // or Percent
+    roles: ["Admin", "Manager"],
+    parent: "Menu Management",
   },
   { label: "Manager Hub", href: "/manager", icon: BarChart3, roles: ["Admin", "Manager"] },
   { label: "Staff Management", href: "/users", icon: Users, roles: ["Admin"] },

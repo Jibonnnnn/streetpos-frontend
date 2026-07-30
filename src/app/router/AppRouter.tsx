@@ -11,6 +11,7 @@ import LandingPage from "@/pages/LandingPage";
 import { LoginForm } from "@/components/login-form";
 import ReportsPage from "@/pages/Reports";
 import CategoriesPage from "@/pages/Categories";
+import PromotionsPage from "@/pages/Promotions";
 
 export function AppRouter() {
   return (
@@ -19,7 +20,7 @@ export function AppRouter() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginForm />} />
 
-        {/* All protected pages inside AppLayout (sidebar) */}
+        {/* All protected pages with sidebar */}
         <Route element={<AppLayout />}>
           <Route
             path="/dashboard"
@@ -54,6 +55,14 @@ export function AppRouter() {
             }
           />
           <Route
+            path="/promotions"
+            element={
+              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
+                <PromotionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/manager"
             element={
               <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
@@ -77,17 +86,15 @@ export function AppRouter() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
+                <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
         </Route>
-
-        {/* Reports outside layout if needed */}
-        <Route
-          path="/reports"
-          element={
-            <ProtectedRoute>
-              <ReportsPage />
-            </ProtectedRoute>
-          }
-        />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

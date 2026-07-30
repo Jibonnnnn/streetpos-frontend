@@ -76,17 +76,20 @@ export interface OrderResponse {
   cashierName: string;
   tableNumber?: string;
   customerNotes?: string;
-  status: 'Pending' | 'Preparing' | 'Ready' | 'Completed' | 'Cancelled';
+  status: "Pending" | "Preparing" | "Ready" | "Completed" | "Cancelled";
   subtotal: number;
   tax: number;
   total: number;
   createdAt: string;
   completedAt?: string;
-  paymentMethod?: 'Cash' | 'GCash' | 'Maya' | 'Card' | 'Other';
+  paymentMethod?: "Cash" | "GCash" | "Maya" | "Card" | "Other";
   amountTendered?: number;
   changeDue?: number;
   transactionReference?: string;
   items: OrderItemResponse[];
+  discountAmount?: number;
+  appliedPromotionId?: number;
+  appliedPromotionName?: string;
 }
 
 // === NEW TYPES FOR ORDERS ===
@@ -105,7 +108,7 @@ export interface OrderItemRequest {
 
 export interface CheckoutRequest {
   orderId: number;
-  paymentMethod: 'Cash' | 'GCash' | 'Maya' | 'Card' | 'Other';
+  paymentMethod: "Cash" | "GCash" | "Maya" | "Card" | "Other";
   amountTendered?: number;
   transactionId?: string;
   notes?: string;
@@ -132,7 +135,7 @@ export interface User {
   fullName: string;
   email: string;
   phoneNumber?: string;
-  role: 'Admin' | 'Manager' | 'Cashier';
+  role: "Admin" | "Manager" | "Cashier";
   isActive: boolean;
   createdAt: string;
   lastLoginAt?: string;
@@ -169,7 +172,7 @@ export type ActivityLogType =
   | "InventoryDeduction"
   | "OrderCompleted"
   | "Other";
- 
+
 export interface ActivityLogEntry {
   id: number;
   type: ActivityLogType;
@@ -189,4 +192,45 @@ export interface DashboardResponse {
   topSellingItems: TopSellingItem[];
   activityLog?: ActivityLogEntry[];
   lastUpdated: string;
+}
+
+export type PromotionType =
+  | "Percentage"
+  | "FixedAmount"
+  | "BuyOneGetOne"
+  | "HappyHour";
+
+export interface Promotion {
+  id: number;
+  name: string;
+  description?: string;
+  type: PromotionType;
+  value: number;
+  startDate: string;
+  endDate: string;
+  availableFrom?: string;
+  availableUntil?: string;
+  minOrderAmount?: number;
+  isActive: boolean;
+  usageCount: number;
+  menuItemIds: number[];
+  menuItemNames: string[];
+  createdAt: string;
+}
+
+export interface CreatePromotionRequest {
+  name: string;
+  description?: string;
+  type: PromotionType;
+  value: number;
+  startDate: string;
+  endDate: string;
+  availableFrom?: string;
+  availableUntil?: string;
+  minOrderAmount?: number;
+  menuItemIds: number[];
+}
+
+export interface UpdatePromotionRequest extends CreatePromotionRequest {
+  isActive: boolean;
 }

@@ -1,42 +1,33 @@
-import { useState } from "react";
-import { useMenuItems } from "@/hooks/queries/useMenu";
-import { useMyOrders, useCreateOrder } from "@/hooks/queries/useOrders";
-import { useCart } from "@/contexts/CartContext";
-import { Button } from "@/components/ui/button";
-import { ordersService } from "@/services/orders.service";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { BadgePill } from "@/components/common/BadgePill";
+import { ModalShell } from "@/components/dialogs/ModalShell";
+import { CashierSkeleton } from "@/components/skeletons/CashierSkeleton";
+import { useCart } from "@/contexts/CartContext";
+import { useMenuItems } from "@/hooks/queries/useMenu";
+import { useMyOrders} from "@/hooks/queries/useOrders";
+import { ordersService } from "@/services/orders.service";
+import { promotionService } from "@/services/promotion.service";
+import { getFullImageUrl } from "@/lib/imageUtils";
+import { toast } from "sonner";
 import {
   CreditCard,
-  Loader2,
-  RefreshCw,
-  AlertTriangle,
-  Trash2,
   Plus,
   Minus,
+  Trash2,
+  RefreshCw,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
-import { toast } from "sonner";
-import { getFullImageUrl } from "@/lib/imageUtils";
-import { ModalShell } from "@/components/dialogs/ModalShell";
-import { BadgePill } from "@/components/common/BadgePill";
-import { CashierSkeleton } from "@/components/skeletons/CashierSkeleton";
-import { menuService } from "@/services/menu.service";
-import type { MenuItem, CartItem, ModifierGroup } from "@/types";
+import type { MenuItem, Promotion, CartItem } from "@/types";
 
 type PaymentMethod = "Cash" | "GCash" | "Maya" | "Card";
 
 export default function CashierPage() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showModifiersModal, setShowModifiersModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [currentModifiers, setCurrentModifiers] = useState<ModifierGroup[]>([]);
-  const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
-  const [customNote, setCustomNote] = useState("");
-
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] =
-    useState<PaymentMethod>("Cash");
-  const [amountTendered, setAmountTendered] = useState("");
+  const { cart, addToCart, removeFromCart, updateQuantity, clearCart, total } =
+    useCart();
 
   const { data: menuItems = [], isLoading: menuLoading } = useMenuItems();
   const {
@@ -44,28 +35,101 @@ export default function CashierPage() {
     isLoading: ordersLoading,
     refetch: refetchOrders,
   } = useMyOrders();
-  const createOrderMutation = useCreateOrder();
 
-  const { cart, addToCart, removeFromCart, updateQuantity, clearCart, total } =
-    useCart();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showModifiersModal, setShowModifiersModal] = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
+  const [customNote, setCustomNote] = useState("");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] =
+    useState<PaymentMethod>("Cash");
+  const [amountTendered, setAmountTendered] = useState("");
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
-  const filteredMenu = menuItems.filter(
-    (item: MenuItem) =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.categoryName.toLowerCase().includes(searchTerm.toLowerCase()),
+  // Promotions
+  const [activePromos, setActivePromos] = useState<Promotion[]>([]);
+  const [selectedPromotionId, setSelectedPromotionId] = useState<number | null>(
+    null,
   );
+  const [previewDiscount, setPreviewDiscount] = useState(0);
 
-  const openModifiersModal = async (item: MenuItem) => {
+  useEffect(() => {
+    promotionService
+      .getActive()
+      .then((res) => setActivePromos(res.data || []))
+      .catch(() => setActivePromos([]));
+  }, []);
+
+  const filteredMenu = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return (menuItems as MenuItem[]).filter((item) => {
+      if (!item.isActive) return false;
+      if (!term) return true;
+      return (
+        item.name.toLowerCase().includes(term) ||
+        item.categoryName?.toLowerCase().includes(term)
+      );
+    });
+  }, [menuItems, searchTerm]);
+
+  const currentModifiers = selectedItem?.modifierGroups || [];
+
+  const calculatePrice = (basePrice: number) => {
+    const modifierTotal = currentModifiers
+      .flatMap((g) => g.options)
+      .filter((o) => selectedOptionIds.includes(o.id))
+      .reduce((sum, o) => sum + o.priceAdjustment, 0);
+    return basePrice + modifierTotal;
+  };
+
+  const calculatePreviewDiscount = (promo: Promotion | null) => {
+    if (!promo || cart.length === 0) return 0;
+
+    const eligible = cart.filter(
+      (item) =>
+        promo.menuItemIds.length === 0 ||
+        promo.menuItemIds.includes(item.id),
+    );
+    if (eligible.length === 0) return 0;
+    if (promo.minOrderAmount && total < promo.minOrderAmount) return 0;
+
+    const eligibleTotal = eligible.reduce((sum, i) => sum + i.itemTotal, 0);
+
+    switch (promo.type) {
+      case "Percentage":
+      case "HappyHour":
+        return Math.round(eligibleTotal * (promo.value / 100) * 100) / 100;
+      case "FixedAmount":
+        return Math.min(promo.value, eligibleTotal);
+      case "BuyOneGetOne": {
+        const prices = eligible
+          .flatMap((i) => Array(i.quantity).fill(i.itemTotal / i.quantity))
+          .sort((a: number, b: number) => a - b);
+        const freeCount = Math.floor(prices.length / 2);
+        return prices.slice(0, freeCount).reduce((s: number, p: number) => s + p, 0);
+      }
+      default:
+        return 0;
+    }
+  };
+
+  useEffect(() => {
+    const promo =
+      activePromos.find((p) => p.id === selectedPromotionId) || null;
+    setPreviewDiscount(calculatePreviewDiscount(promo));
+  }, [selectedPromotionId, cart, activePromos, total]);
+
+  const finalTotal = Math.max(0, total - previewDiscount);
+  const changeDue =
+    selectedPaymentMethod === "Cash" && amountTendered
+      ? Math.max(0, parseFloat(amountTendered) - finalTotal)
+      : 0;
+
+  const openModifiersModal = (item: MenuItem) => {
     setSelectedItem(item);
     setSelectedOptionIds([]);
     setCustomNote("");
-
-    try {
-      const res = await menuService.getMenuItem(item.id);
-      setCurrentModifiers(res.data?.modifierGroups || []);
-    } catch {
-      setCurrentModifiers([]);
-    }
     setShowModifiersModal(true);
   };
 
@@ -77,39 +141,22 @@ export default function CashierPage() {
     );
   };
 
-  const calculatePrice = (basePrice: number) => {
-    let extra = 0;
-    currentModifiers.forEach((group) => {
-      group.options.forEach((option) => {
-        if (selectedOptionIds.includes(option.id)) {
-          extra += option.priceAdjustment || 0;
-        }
-      });
-    });
-    return basePrice + extra;
-  };
-
   const handleAddToCart = () => {
     if (!selectedItem) return;
 
-    const finalPrice = calculatePrice(selectedItem.price);
+    const unitPrice = calculatePrice(selectedItem.price);
     const cartItem: CartItem = {
       ...selectedItem,
       quantity: 1,
-      selectedModifierOptionIds: [...selectedOptionIds],
-      note: customNote.trim() || undefined,
-      itemTotal: finalPrice,
+      selectedModifierOptionIds: selectedOptionIds,
+      note: customNote || undefined,
+      itemTotal: unitPrice,
     };
 
     addToCart(cartItem);
     setShowModifiersModal(false);
     toast.success(`${selectedItem.name} added to order`);
   };
-
-  const changeDue =
-    selectedPaymentMethod === "Cash" && amountTendered
-      ? Math.max(0, parseFloat(amountTendered) - total)
-      : 0;
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -124,14 +171,16 @@ export default function CashierPage() {
 
     if (
       selectedPaymentMethod === "Cash" &&
-      parseFloat(amountTendered) < total
+      parseFloat(amountTendered) < finalTotal
     ) {
       toast.error("Amount tendered is insufficient");
       return;
     }
 
     try {
-      // 1. Create the order
+      setIsCheckingOut(true);
+
+      // 1. Create order
       const orderPayload = {
         tableNumber: "T1",
         customerNotes: "",
@@ -146,11 +195,9 @@ export default function CashierPage() {
       const createRes = await ordersService.createOrder(orderPayload);
       const orderId = createRes.data?.id;
 
-      if (!orderId) {
-        throw new Error("Failed to create order");
-      }
+      if (!orderId) throw new Error("Failed to create order");
 
-      // 2. Checkout / Finalize the order
+      // 2. Checkout with optional promotion
       const checkoutPayload = {
         orderId,
         paymentMethod: selectedPaymentMethod,
@@ -161,23 +208,31 @@ export default function CashierPage() {
         transactionId:
           selectedPaymentMethod !== "Cash" ? `TX-${Date.now()}` : undefined,
         notes: "",
+        promotionId: selectedPromotionId ?? undefined,
       };
 
       await ordersService.checkoutOrder(checkoutPayload);
 
       toast.success("✅ Order completed successfully!", {
-        description: "Inventory has been automatically deducted.",
+        description:
+          previewDiscount > 0
+            ? `Discount applied: −₱${previewDiscount.toFixed(2)}`
+            : "Inventory has been automatically deducted.",
       });
 
       clearCart();
       setShowCheckoutModal(false);
       setAmountTendered("");
       setSelectedPaymentMethod("Cash");
+      setSelectedPromotionId(null);
+      setPreviewDiscount(0);
       refetchOrders();
     } catch (error: any) {
       toast.error(
         error?.response?.data?.message || "Checkout failed. Please try again.",
       );
+    } finally {
+      setIsCheckingOut(false);
     }
   };
 
@@ -192,7 +247,7 @@ export default function CashierPage() {
             POS Terminal
           </h1>
           <p className="text-muted-foreground">
-            Search menu • Build orders • Complete payment
+            Search menu • Build orders • Apply discounts • Complete payment
           </p>
         </div>
         <Input
@@ -251,9 +306,7 @@ export default function CashierPage() {
                     Tap a card to add modifiers and build the order.
                   </p>
                 </div>
-                <BadgePill tone="info">
-                  {filteredMenu.length} available
-                </BadgePill>
+                <BadgePill tone="info">{filteredMenu.length} available</BadgePill>
               </div>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -269,9 +322,7 @@ export default function CashierPage() {
                       onClick={() => openModifiersModal(item)}
                     >
                       <div className="relative h-48 bg-zinc-100 dark:bg-zinc-800">
-                        {getFullImageUrl(
-                          item.imageFileName ?? item.imageUrl,
-                        ) ? (
+                        {getFullImageUrl(item.imageFileName ?? item.imageUrl) ? (
                           <img
                             src={
                               getFullImageUrl(
@@ -346,7 +397,7 @@ export default function CashierPage() {
                 <BadgePill tone="neutral">{cart.length} items</BadgePill>
               </div>
 
-              <div className="min-h-[280px] max-h-[380px] space-y-3 overflow-auto pr-1">
+              <div className="min-h-[200px] max-h-[300px] space-y-3 overflow-auto pr-1">
                 {cart.length === 0 ? (
                   <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
                     Your cart is empty.
@@ -371,7 +422,6 @@ export default function CashierPage() {
                         </p>
                       </div>
 
-                      {/* Quantity Controls + Delete */}
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
@@ -382,11 +432,9 @@ export default function CashierPage() {
                         >
                           <Minus className="h-3.5 w-3.5" />
                         </Button>
-
                         <span className="w-8 text-center text-sm font-semibold">
                           {item.quantity}
                         </span>
-
                         <Button
                           variant="outline"
                           size="icon"
@@ -395,7 +443,6 @@ export default function CashierPage() {
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </Button>
-
                         <button
                           onClick={() => removeFromCart(idx)}
                           className="ml-1 rounded-xl p-2 text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/30"
@@ -408,10 +455,76 @@ export default function CashierPage() {
                 )}
               </div>
 
-              <div className="mt-8 border-t border-border/60 pt-6">
+              {/* Apply Promotion */}
+              {activePromos.length > 0 && cart.length > 0 && (
+                <div className="mt-5 rounded-2xl border border-border/60 bg-zinc-50 p-4 dark:bg-zinc-900/50">
+                  <p className="mb-3 text-sm font-medium">Apply Promotion</p>
+                  <div className="space-y-1">
+                    <label className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800">
+                      <input
+                        type="radio"
+                        name="promo"
+                        checked={selectedPromotionId === null}
+                        onChange={() => setSelectedPromotionId(null)}
+                      />
+                      <span className="text-sm">None</span>
+                    </label>
+
+                    {activePromos.map((promo) => {
+                      const label =
+                        promo.type === "FixedAmount"
+                          ? `₱${promo.value} off`
+                          : promo.type === "BuyOneGetOne"
+                            ? "Buy 1 Get 1"
+                            : `${promo.value}% off`;
+
+                      return (
+                        <label
+                          key={promo.id}
+                          className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800"
+                        >
+                          <input
+                            type="radio"
+                            name="promo"
+                            checked={selectedPromotionId === promo.id}
+                            onChange={() => setSelectedPromotionId(promo.id)}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">{promo.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {label}
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {previewDiscount > 0 && (
+                    <p className="mt-3 text-sm font-semibold text-emerald-600">
+                      Discount: −₱{previewDiscount.toFixed(2)}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Totals */}
+              <div className="mt-6 border-t border-border/60 pt-5">
+                {previewDiscount > 0 && (
+                  <div className="mb-3 space-y-1 text-sm">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Subtotal</span>
+                      <span>₱{total.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-emerald-600">
+                      <span>Discount</span>
+                      <span>−₱{previewDiscount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
                 <div className="mb-6 flex items-center justify-between text-3xl font-bold">
                   <span>Total</span>
-                  <span>₱{total.toFixed(2)}</span>
+                  <span>₱{finalTotal.toFixed(2)}</span>
                 </div>
                 <Button
                   onClick={() => setShowCheckoutModal(true)}
@@ -470,7 +583,11 @@ export default function CashierPage() {
                             {order.orderNumber || `#${order.id}`}
                           </div>
                           <div className="mt-1 text-xs text-muted-foreground">
-                            {new Date(order.createdAt).toLocaleString([], {
+                            {new Date(
+                              order.createdAt?.endsWith?.("Z")
+                                ? order.createdAt
+                                : order.createdAt + "Z",
+                            ).toLocaleString([], {
                               month: "short",
                               day: "numeric",
                               hour: "numeric",
@@ -535,9 +652,7 @@ export default function CashierPage() {
                           onChange={() => toggleOption(option.id)}
                         />
                         <div>
-                          <div className="text-sm font-medium">
-                            {option.name}
-                          </div>
+                          <div className="text-sm font-medium">{option.name}</div>
                           {option.priceAdjustment > 0 && (
                             <div className="text-xs text-emerald-600">
                               +₱{option.priceAdjustment.toFixed(2)}
@@ -587,13 +702,20 @@ export default function CashierPage() {
         <ModalShell
           open={showCheckoutModal}
           title="Complete Payment"
-          description={`Order total: ₱${total.toFixed(2)}`}
+          description={`Order total: ₱${finalTotal.toFixed(2)}`}
           onClose={() => setShowCheckoutModal(false)}
           className="max-w-md"
         >
           <div className="space-y-6">
-            <div className="text-center text-5xl font-bold tracking-tight">
-              ₱{total.toFixed(2)}
+            <div className="text-center">
+              <div className="text-5xl font-bold tracking-tight">
+                ₱{finalTotal.toFixed(2)}
+              </div>
+              {previewDiscount > 0 && (
+                <p className="mt-2 text-sm text-emerald-600">
+                  Includes −₱{previewDiscount.toFixed(2)} discount
+                </p>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -637,12 +759,12 @@ export default function CashierPage() {
               <Button
                 onClick={handleCheckout}
                 disabled={
-                  createOrderMutation.isPending ||
+                  isCheckingOut ||
                   (selectedPaymentMethod === "Cash" && !amountTendered)
                 }
                 className="flex-1 py-7 text-lg"
               >
-                {createOrderMutation.isPending && (
+                {isCheckingOut && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 Confirm Payment
@@ -651,7 +773,7 @@ export default function CashierPage() {
                 variant="outline"
                 className="flex-1 py-7"
                 onClick={() => setShowCheckoutModal(false)}
-                disabled={createOrderMutation.isPending}
+                disabled={isCheckingOut}
               >
                 Cancel
               </Button>
