@@ -1,4 +1,3 @@
-// src/pages/Categories.tsx
 import { useState, useEffect } from "react";
 import { categoryService } from "@/services/category.service";
 import { menuService } from "@/services/menu.service";
@@ -13,16 +12,21 @@ import { ModalShell } from "@/components/dialogs/ModalShell";
 import { BadgePill } from "@/components/common/BadgePill";
 import { FormField } from "@/components/forms/form-field";
 import { FormSection } from "@/components/forms/form-section";
+import { getFullImageUrl } from "@/lib/imageUtils";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [menuItemsByCategory, setMenuItemsByCategory] = useState<Record<number, MenuItem[]>>({});
+  const [menuItemsByCategory, setMenuItemsByCategory] = useState<
+    Record<number, MenuItem[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
-  const [selectedCategoryMenus, setSelectedCategoryMenus] = useState<MenuItem[]>([]);
+  const [selectedCategoryMenus, setSelectedCategoryMenus] = useState<
+    MenuItem[]
+  >([]);
   const [selectedCategoryName, setSelectedCategoryName] = useState("");
 
   const [formData, setFormData] = useState({
@@ -32,38 +36,40 @@ export default function CategoriesPage() {
   });
 
   const fetchCategories = async () => {
-  try {
-    setLoading(true);
-    
-    // 1. Fetch categories first
-    const catRes = await categoryService.getAll();
-    const cats = catRes.data || [];
-    setCategories(cats);
+    try {
+      setLoading(true);
 
-    // 2. Fetch all menu items
-    const menuRes = await menuService.getMenu();
-    const menus: MenuItem[] = menuRes.data || [];
+      // 1. Fetch categories first
+      const catRes = await categoryService.getAll();
+      const cats = catRes.data || [];
+      setCategories(cats);
 
-    // 3. Group menus by categoryId (reliable, matches backend contract)
-    const grouped: Record<number, MenuItem[]> = {};
+      // 2. Fetch all menu items
+      const menuRes = await menuService.getMenu();
+      const menus: MenuItem[] = menuRes.data || [];
 
-    cats.forEach((cat) => {
-      grouped[cat.id] = menus.filter((menu: MenuItem) => menu.categoryId === cat.id);
-    });
+      // 3. Group menus by categoryId (reliable, matches backend contract)
+      const grouped: Record<number, MenuItem[]> = {};
 
-    setMenuItemsByCategory(grouped);
-  } catch (err: any) {
-    toast.error(err.response?.data?.message || "Failed to load categories");
-    console.error(err);
-  } finally {
-    setLoading(false);
-  }
-};
+      cats.forEach((cat) => {
+        grouped[cat.id] = menus.filter(
+          (menu: MenuItem) => menu.categoryId === cat.id,
+        );
+      });
 
-// Load categories on component mount
-useEffect(() => {
-  fetchCategories();
-}, []);
+      setMenuItemsByCategory(grouped);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to load categories");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load categories on component mount
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
   const openModal = (category?: Category) => {
     if (category) {
@@ -109,7 +115,9 @@ useEffect(() => {
       toast.success("Category deactivated");
       fetchCategories();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to deactivate category");
+      toast.error(
+        err.response?.data?.message || "Failed to deactivate category",
+      );
     }
   };
 
@@ -118,7 +126,9 @@ useEffect(() => {
     try {
       const res = await menuService.getMenu();
       // Explicitly type the menu item to avoid implicit any
-      const filtered = (res.data || []).filter((m: MenuItem) => m.categoryId === category.id);
+      const filtered = (res.data || []).filter(
+        (m: MenuItem) => m.categoryId === category.id,
+      );
       setSelectedCategoryMenus(filtered);
       setShowMenuModal(true);
     } catch (err) {
@@ -127,27 +137,26 @@ useEffect(() => {
   };
   const columns = [
     { header: "Name", accessor: "name" as const },
-    { 
-      header: "Description", 
-      accessor: (cat: Category) => cat.description || "-" 
+    {
+      header: "Description",
+      accessor: (cat: Category) => cat.description || "-",
     },
-    { 
-  header: "Menus", 
-  accessor: (cat: Category) => {
-    const count = menuItemsByCategory[cat.id]?.length || 0;
-    return (
-      <Button 
-        variant="outline" 
-        size="sm" 
-        onClick={() => viewMenus(cat)}
-        className="text-xs hover:bg-amber-50"
-      >
-        <Eye className="w-3 h-3 mr-1" />
-        {count} items
-      </Button>
-    );
-  }
-
+    {
+      header: "Menus",
+      accessor: (cat: Category) => {
+        const count = menuItemsByCategory[cat.id]?.length || 0;
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => viewMenus(cat)}
+            className="text-xs hover:bg-amber-50"
+          >
+            <Eye className="w-3 h-3 mr-1" />
+            {count} items
+          </Button>
+        );
+      },
     },
     {
       header: "Status",
@@ -206,13 +215,33 @@ useEffect(() => {
         <form onSubmit={handleSubmit} className="space-y-6">
           <FormSection title="Category Information">
             <FormField label="Category Name">
-              <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
+              <Input
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+                required
+              />
             </FormField>
             <FormField label="Description">
-              <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
+              <Input
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+              />
             </FormField>
             <FormField label="Display Order">
-              <Input type="number" value={formData.displayOrder} onChange={(e) => setFormData({ ...formData, displayOrder: parseInt(e.target.value) || 0 })} />
+              <Input
+                type="number"
+                value={formData.displayOrder}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    displayOrder: parseInt(e.target.value) || 0,
+                  })
+                }
+              />
             </FormField>
           </FormSection>
 
@@ -220,7 +249,12 @@ useEffect(() => {
             <Button type="submit" className="flex-1" disabled={submitting}>
               {submitting ? "Saving..." : editingCategory ? "Update" : "Create"}
             </Button>
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setShowModal(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowModal(false)}
+            >
               Cancel
             </Button>
           </div>
@@ -237,12 +271,32 @@ useEffect(() => {
       >
         <div className="max-h-[60vh] overflow-auto space-y-3 pr-2">
           {selectedCategoryMenus.length === 0 ? (
-            <p className="text-center text-muted-foreground py-12">No menu items in this category yet.</p>
+            <p className="text-center text-muted-foreground py-12">
+              No menu items in this category yet.
+            </p>
           ) : (
             selectedCategoryMenus.map((item) => (
-              <div key={item.id} className="flex items-center gap-4 rounded-2xl border p-4">
-                <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden">
-                  {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />}
+              <div
+                key={item.id}
+                className="flex items-center gap-4 rounded-2xl border p-4"
+              >
+                <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden flex-shrink-0">
+                  {(() => {
+                    const imageSrc = getFullImageUrl(
+                      item.imageFileName ?? item.imageUrl,
+                    );
+                    return imageSrc ? (
+                      <img
+                        src={imageSrc}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // hide broken image so the placeholder background shows
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    ) : null;
+                  })()}
                 </div>
                 <div className="flex-1">
                   <p className="font-medium">{item.name}</p>

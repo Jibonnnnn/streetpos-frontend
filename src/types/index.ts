@@ -75,6 +75,7 @@ export interface OrderResponse {
   cashierId: number;
   cashierName: string;
   tableNumber?: string;
+  customerName?: string;
   customerNotes?: string;
   status: "Pending" | "Preparing" | "Ready" | "Completed" | "Cancelled";
   subtotal: number;
@@ -250,3 +251,5 @@ export interface OnlineCartItem {
   menuItem: MenuItem;
   quantity: number;
 }
+
+export type PaymentMethod = "Cash" | "GCash" | "Maya" | "Card" | "Other" | "PayLater";

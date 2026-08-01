@@ -1,3 +1,4 @@
+import type { OrderResponse } from "@/types";
 import api from "./api";
 
 export const ordersService = {
@@ -20,6 +21,20 @@ export const ordersService = {
       itemNotes?: string;
     }[];
   }) => api.post("/orders/online", data),
-  
+
   getOnlineOrders: () => api.get("/orders/online"),
+
+  // src/services/orders.service.ts
+
+  getOpenTabs: () => api.get<OrderResponse[]>("/orders/open-tabs"),
+
+  settlePayLater: (
+    orderId: number,
+    payload: {
+      paymentMethod: string;
+      amountTendered?: number;
+      transactionId?: string;
+      notes?: string;
+    },
+  ) => api.post<OrderResponse>(`/orders/${orderId}/settle`, payload),
 };

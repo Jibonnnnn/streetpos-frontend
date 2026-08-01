@@ -6,6 +6,7 @@ import { BadgePill } from "@/components/common/BadgePill";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { CashierSkeleton } from "@/components/skeletons/CashierSkeleton";
 import { useCart } from "@/contexts/CartContext";
+import { useKioskMode } from "@/hooks/useKioskMode";
 import { useMenuItems } from "@/hooks/queries/useMenu";
 import { useMyOrders } from "@/hooks/queries/useOrders";
 import { ordersService } from "@/services/orders.service";
@@ -22,11 +23,20 @@ import {
   AlertTriangle,
   Globe,
 } from "lucide-react";
-import type { MenuItem, Promotion, CartItem } from "@/types";
-
-type PaymentMethod = "Cash" | "GCash" | "Maya" | "Card";
+import type {
+  MenuItem,
+  Promotion,
+  CartItem,
+  OrderResponse,
+  PaymentMethod,
+} from "@/types";
 
 export default function CashierPage() {
+  // Keep the POS fullscreen and the screen awake while a cashier is working.
+  // Automatically cleans up (exits fullscreen, releases wake lock) if the
+  // cashier navigates away to another page.
+  useKioskMode();
+
   const { cart, addToCart, removeFromCart, updateQuantity, clearCart, total } =
     useCart();
 
@@ -55,8 +65,10 @@ export default function CashierPage() {
   );
   const [previewDiscount, setPreviewDiscount] = useState(0);
 
-  // Online orders tab
-  const [posTab, setPosTab] = useState<"pos" | "online">("pos");
+  // Tabs: pos | online | tabs
+  const [posTab, setPosTab] = useState<"pos" | "online" | "tabs">("pos");
+
+  // Online orders
   const [expandedOnlineOrderId, setExpandedOnlineOrderId] = useState<
     number | null
   >(null);
@@ -66,6 +78,12 @@ export default function CashierPage() {
     number | null
   >(null);
 
+  // Open Tabs (Pay Later)
+  const [openTabs, setOpenTabs] = useState<OrderResponse[]>([]);
+  const [openTabsLoading, setOpenTabsLoading] = useState(false);
+  const [settleOrderId, setSettleOrderId] = useState<number | null>(null);
+
+  // ---------- effects ----------
   useEffect(() => {
     promotionService
       .getActive()
@@ -85,12 +103,24 @@ export default function CashierPage() {
     }
   };
 
-  useEffect(() => {
-    if (posTab === "online") {
-      fetchOnlineOrders();
+  const fetchOpenTabs = async () => {
+    try {
+      setOpenTabsLoading(true);
+      const res = await ordersService.getOpenTabs();
+      setOpenTabs(res.data || []);
+    } catch {
+      toast.error("Failed to load open tabs");
+    } finally {
+      setOpenTabsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (posTab === "online") fetchOnlineOrders();
+    if (posTab === "tabs") fetchOpenTabs();
   }, [posTab]);
 
+  // ---------- derived values ----------
   const filteredMenu = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
     return (menuItems as MenuItem[]).filter((item) => {
@@ -104,6 +134,7 @@ export default function CashierPage() {
   }, [menuItems, searchTerm]);
 
   const currentModifiers = selectedItem?.modifierGroups || [];
+  const [payLaterCustomerName, setPayLaterCustomerName] = useState("");
 
   const calculatePrice = (basePrice: number) => {
     const modifierTotal = currentModifiers
@@ -146,23 +177,41 @@ export default function CashierPage() {
   };
 
   useEffect(() => {
-    if (checkoutOnlineOrderId) {
+    if (
+      checkoutOnlineOrderId ||
+      settleOrderId ||
+      selectedPaymentMethod === "PayLater"
+    ) {
       setPreviewDiscount(0);
+      setSelectedPromotionId(null);
       return;
     }
     const promo =
       activePromos.find((p) => p.id === selectedPromotionId) || null;
     setPreviewDiscount(calculatePreviewDiscount(promo));
-  }, [selectedPromotionId, cart, activePromos, total, checkoutOnlineOrderId]);
+  }, [
+    selectedPromotionId,
+    cart,
+    activePromos,
+    total,
+    checkoutOnlineOrderId,
+    settleOrderId,
+    selectedPaymentMethod,
+  ]);
 
   const onlineOrderBeingCheckedOut = onlineOrders.find(
     (o) => o.id === checkoutOnlineOrderId,
   );
   const onlineOrderTotal = onlineOrderBeingCheckedOut?.total ?? 0;
 
-  const finalTotal = checkoutOnlineOrderId
-    ? onlineOrderTotal
-    : Math.max(0, total - previewDiscount);
+  const settleOrder = openTabs.find((o) => o.id === settleOrderId);
+  const settleTotal = settleOrder?.total ?? 0;
+
+  const finalTotal = settleOrderId
+    ? settleTotal
+    : checkoutOnlineOrderId
+      ? onlineOrderTotal
+      : Math.max(0, total - previewDiscount);
 
   const changeDue =
     selectedPaymentMethod === "Cash" && amountTendered
@@ -173,6 +222,7 @@ export default function CashierPage() {
     (o) => o.status === "Pending",
   ).length;
 
+  // ---------- helpers ----------
   const openModifiersModal = (item: MenuItem) => {
     setSelectedItem(item);
     setSelectedOptionIds([]);
@@ -207,6 +257,17 @@ export default function CashierPage() {
 
   const openOnlineCheckout = (order: any) => {
     setCheckoutOnlineOrderId(order.id);
+    setSettleOrderId(null);
+    setSelectedPaymentMethod("Cash");
+    setAmountTendered("");
+    setSelectedPromotionId(null);
+    setPreviewDiscount(0);
+    setShowCheckoutModal(true);
+  };
+
+  const openSettleCheckout = (order: OrderResponse) => {
+    setSettleOrderId(order.id);
+    setCheckoutOnlineOrderId(null);
     setSelectedPaymentMethod("Cash");
     setAmountTendered("");
     setSelectedPromotionId(null);
@@ -217,8 +278,11 @@ export default function CashierPage() {
   const closeCheckoutModal = () => {
     setShowCheckoutModal(false);
     setCheckoutOnlineOrderId(null);
+    setSettleOrderId(null);
+    setPayLaterCustomerName("");
   };
 
+  // ---------- main checkout / settle handler ----------
   const handleCheckout = async () => {
     if (selectedPaymentMethod === "Cash" && !amountTendered) {
       toast.error("Please enter amount tendered");
@@ -236,7 +300,29 @@ export default function CashierPage() {
     try {
       setIsCheckingOut(true);
 
-      // ===== Online order: checkout only =====
+      // 1. Settle an existing Pay-Later tab
+      if (settleOrderId) {
+        await ordersService.settlePayLater(settleOrderId, {
+          paymentMethod: selectedPaymentMethod,
+          amountTendered:
+            selectedPaymentMethod === "Cash"
+              ? parseFloat(amountTendered)
+              : undefined,
+          transactionId:
+            selectedPaymentMethod !== "Cash" ? `TX-${Date.now()}` : undefined,
+          notes: "",
+        });
+
+        toast.success("✅ Tab settled successfully!");
+        closeCheckoutModal();
+        setAmountTendered("");
+        setSelectedPaymentMethod("Cash");
+        fetchOpenTabs();
+        refetchOrders();
+        return;
+      }
+
+      // 2. Online order checkout
       if (checkoutOnlineOrderId) {
         await ordersService.checkoutOrder({
           orderId: checkoutOnlineOrderId,
@@ -260,7 +346,7 @@ export default function CashierPage() {
         return;
       }
 
-      // ===== POS cart: create + checkout =====
+      // 3. Normal POS cart → create + checkout
       if (cart.length === 0) {
         toast.error("Cart is empty");
         return;
@@ -291,15 +377,29 @@ export default function CashierPage() {
         transactionId:
           selectedPaymentMethod !== "Cash" ? `TX-${Date.now()}` : undefined,
         notes: "",
-        promotionId: selectedPromotionId ?? undefined,
+        promotionId:
+          selectedPaymentMethod === "PayLater"
+            ? undefined
+            : (selectedPromotionId ?? undefined),
+        customerName:
+          selectedPaymentMethod === "PayLater"
+            ? payLaterCustomerName.trim()
+            : undefined, // ← must be here
       });
 
-      toast.success("✅ Order completed successfully!", {
-        description:
-          previewDiscount > 0
-            ? `Discount applied: −₱${previewDiscount.toFixed(2)}`
-            : "Inventory has been automatically deducted.",
-      });
+      if (selectedPaymentMethod === "PayLater") {
+        toast.success("Order placed on tab (Pay Later)", {
+          description: "You can collect payment later from the Open Tabs tab.",
+        });
+        fetchOpenTabs();
+      } else {
+        toast.success("✅ Order completed successfully!", {
+          description:
+            previewDiscount > 0
+              ? `Discount applied: −₱${previewDiscount.toFixed(2)}`
+              : "Inventory has been automatically deducted.",
+        });
+      }
 
       clearCart();
       closeCheckoutModal();
@@ -317,6 +417,7 @@ export default function CashierPage() {
     }
   };
 
+  // ---------- render ----------
   if (menuLoading) return <CashierSkeleton />;
 
   return (
@@ -328,7 +429,7 @@ export default function CashierPage() {
             POS Terminal
           </h1>
           <p className="text-muted-foreground">
-            Walk-in orders • Online orders • Discounts • Payment
+            Walk-in orders • Online orders • Open tabs • Payment
           </p>
         </div>
         {posTab === "pos" && (
@@ -350,6 +451,7 @@ export default function CashierPage() {
         >
           POS Terminal
         </Button>
+
         <Button
           variant={posTab === "online" ? "default" : "outline"}
           className="rounded-2xl gap-2"
@@ -363,10 +465,157 @@ export default function CashierPage() {
             </span>
           )}
         </Button>
+
+        <Button
+          variant={posTab === "tabs" ? "default" : "outline"}
+          className="rounded-2xl gap-2"
+          onClick={() => setPosTab("tabs")}
+        >
+          Open Tabs
+          {openTabs.length > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white">
+              {openTabs.length}
+            </span>
+          )}
+        </Button>
       </div>
 
-      {/* ========== ONLINE TAB ========== */}
-      {posTab === "online" ? (
+      {/* ========== OPEN TABS TAB ========== */}
+      {posTab === "tabs" ? (
+        <Card className="border-border/60 bg-white/80 shadow-sm">
+          <CardContent className="p-6">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="font-heading text-2xl font-semibold tracking-tight">
+                  Open Tabs (Pay Later)
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Unpaid orders. Collect payment to close the tab.
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchOpenTabs}
+                disabled={openTabsLoading}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${openTabsLoading ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </div>
+
+            {openTabsLoading ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : openTabs.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
+                No open tabs right now.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {openTabs.map((order) => {
+                  // Support both shapes the API may return
+                  const items = order.items || (order as any).orderItems || [];
+
+                  // Prefer customer name → cashier name → Walk-in
+                  const displayName =
+                    order.customerName?.trim() ||
+                    order.cashierName?.trim() ||
+                    "Walk-in";
+
+                  return (
+                    <div
+                      key={order.id}
+                      className="rounded-2xl border border-border/60 bg-zinc-50 p-5 dark:bg-zinc-950/50"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-mono font-semibold">
+                              {order.orderNumber || `#${order.id}`}
+                            </p>
+                            <BadgePill tone="warning">Pay Later</BadgePill>
+                          </div>
+
+                          {/* Customer name instead of Cashier */}
+                          <p className="mt-2 text-sm font-medium">
+                            Customer:{" "}
+                            <span className="text-amber-700 dark:text-amber-400">
+                              {displayName}
+                            </span>
+                          </p>
+
+                          {/* Date only – table number removed */}
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {new Date(
+                              order.createdAt?.endsWith?.("Z")
+                                ? order.createdAt
+                                : order.createdAt + "Z",
+                            ).toLocaleString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </p>
+
+                          {/* Items – safer name resolution */}
+                          <ul className="mt-3 space-y-1">
+                            {items.length === 0 ? (
+                              <li className="text-sm text-muted-foreground">
+                                No items
+                              </li>
+                            ) : (
+                              items
+                                .slice(0, 5)
+                                .map((item: any, idx: number) => {
+                                  const name =
+                                    item.menuItemName ||
+                                    item.menuItem?.name ||
+                                    item.name ||
+                                    "Item";
+                                  return (
+                                    <li
+                                      key={idx}
+                                      className="text-sm text-muted-foreground"
+                                    >
+                                      {item.quantity}× {name}
+                                    </li>
+                                  );
+                                })
+                            )}
+                            {items.length > 5 && (
+                              <li className="text-xs text-muted-foreground">
+                                +{items.length - 5} more…
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-3 sm:shrink-0">
+                          <p className="text-xl font-bold">
+                            ₱{(order.total || 0).toFixed(2)}
+                          </p>
+                          <Button
+                            className="rounded-2xl"
+                            onClick={() => openSettleCheckout(order)}
+                          >
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Collect Payment
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : posTab === "online" ? (
+        /* ========== ONLINE TAB ========== */
         <Card className="border-border/60 bg-white/80 shadow-sm">
           <CardContent className="p-6">
             <div className="mb-6 flex items-center justify-between gap-4">
@@ -409,7 +658,6 @@ export default function CashierPage() {
                       key={order.id}
                       className="rounded-2xl border border-border/60 bg-zinc-50 p-5 transition-colors dark:bg-zinc-950/50"
                     >
-                      {/* Clickable header */}
                       <button
                         type="button"
                         className="flex w-full flex-col gap-4 text-left sm:flex-row sm:items-start sm:justify-between"
@@ -466,7 +714,6 @@ export default function CashierPage() {
                         </div>
                       </button>
 
-                      {/* Expanded details */}
                       {isExpanded && (
                         <div className="mt-4 border-t border-border/50 pt-4">
                           <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -547,7 +794,6 @@ export default function CashierPage() {
                         </div>
                       )}
 
-                      {/* Checkout button when collapsed */}
                       {!isExpanded && order.status === "Pending" && (
                         <div className="mt-4 flex justify-end">
                           <Button
@@ -638,7 +884,6 @@ export default function CashierPage() {
                           onClick={() => openModifiersModal(item)}
                           className="group relative flex flex-col overflow-hidden rounded-3xl border border-zinc-200/80 bg-white text-left shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-amber-300/60 hover:shadow-[0_20px_40px_rgba(245,158,11,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-zinc-800 dark:bg-zinc-900/80 dark:hover:border-amber-500/30"
                         >
-                          {/* Image */}
                           <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-zinc-100 to-zinc-50 dark:from-zinc-800 dark:to-zinc-900">
                             {imageSrc ? (
                               <img
@@ -656,10 +901,8 @@ export default function CashierPage() {
                               </div>
                             )}
 
-                            {/* Soft gradient overlay */}
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-60" />
 
-                            {/* Price pill */}
                             <div className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-sm font-semibold text-amber-700 shadow-sm backdrop-blur-sm dark:bg-zinc-950/90 dark:text-amber-400">
                               ₱{item.price.toFixed(2)}
                             </div>
@@ -677,7 +920,6 @@ export default function CashierPage() {
                             )}
                           </div>
 
-                          {/* Text */}
                           <div className="flex flex-1 flex-col p-4">
                             <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                               {item.categoryName}
@@ -793,60 +1035,62 @@ export default function CashierPage() {
                   </div>
 
                   {/* Apply Promotion */}
-                  {activePromos.length > 0 && cart.length > 0 && (
-                    <div className="mt-5 rounded-2xl border border-border/60 bg-zinc-50 p-4 dark:bg-zinc-900/50">
-                      <p className="mb-3 text-sm font-medium">
-                        Apply Promotion
-                      </p>
-                      <div className="space-y-1">
-                        <label className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800">
-                          <input
-                            type="radio"
-                            name="promo"
-                            checked={selectedPromotionId === null}
-                            onChange={() => setSelectedPromotionId(null)}
-                          />
-                          <span className="text-sm">None</span>
-                        </label>
-                        {activePromos.map((promo) => {
-                          const label =
-                            promo.type === "FixedAmount"
-                              ? `₱${promo.value} off`
-                              : promo.type === "BuyOneGetOne"
-                                ? "Buy 1 Get 1"
-                                : `${promo.value}% off`;
-                          return (
-                            <label
-                              key={promo.id}
-                              className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800"
-                            >
-                              <input
-                                type="radio"
-                                name="promo"
-                                checked={selectedPromotionId === promo.id}
-                                onChange={() =>
-                                  setSelectedPromotionId(promo.id)
-                                }
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium">
-                                  {promo.name}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {label}
-                                </p>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      {previewDiscount > 0 && (
-                        <p className="mt-3 text-sm font-semibold text-emerald-600">
-                          Discount: −₱{previewDiscount.toFixed(2)}
+                  {activePromos.length > 0 &&
+                    cart.length > 0 &&
+                    selectedPaymentMethod !== "PayLater" && (
+                      <div className="mt-5 rounded-2xl border border-border/60 bg-zinc-50 p-4 dark:bg-zinc-900/50">
+                        <p className="mb-3 text-sm font-medium">
+                          Apply Promotion
                         </p>
-                      )}
-                    </div>
-                  )}
+                        <div className="space-y-1">
+                          <label className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800">
+                            <input
+                              type="radio"
+                              name="promo"
+                              checked={selectedPromotionId === null}
+                              onChange={() => setSelectedPromotionId(null)}
+                            />
+                            <span className="text-sm">None</span>
+                          </label>
+                          {activePromos.map((promo) => {
+                            const label =
+                              promo.type === "FixedAmount"
+                                ? `₱${promo.value} off`
+                                : promo.type === "BuyOneGetOne"
+                                  ? "Buy 1 Get 1"
+                                  : `${promo.value}% off`;
+                            return (
+                              <label
+                                key={promo.id}
+                                className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800"
+                              >
+                                <input
+                                  type="radio"
+                                  name="promo"
+                                  checked={selectedPromotionId === promo.id}
+                                  onChange={() =>
+                                    setSelectedPromotionId(promo.id)
+                                  }
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium">
+                                    {promo.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {label}
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                        {previewDiscount > 0 && (
+                          <p className="mt-3 text-sm font-semibold text-emerald-600">
+                            Discount: −₱{previewDiscount.toFixed(2)}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                   {/* Totals */}
                   <div className="mt-6 border-t border-border/60 pt-5">
@@ -868,6 +1112,7 @@ export default function CashierPage() {
                     </div>
                     <Button
                       onClick={() => {
+                        setSettleOrderId(null);
                         setCheckoutOnlineOrderId(null);
                         setShowCheckoutModal(true);
                       }}
@@ -947,10 +1192,15 @@ export default function CashierPage() {
                                   tone={
                                     order.status === "Completed"
                                       ? "success"
-                                      : "warning"
+                                      : order.paymentMethod === "PayLater"
+                                        ? "warning"
+                                        : "warning"
                                   }
                                 >
-                                  {order.status}
+                                  {order.paymentMethod === "PayLater" &&
+                                  order.status === "Pending"
+                                    ? "Pay Later"
+                                    : order.status}
                                 </BadgePill>
                               </div>
                             </div>
@@ -1044,48 +1294,81 @@ export default function CashierPage() {
         </ModalShell>
       )}
 
-      {/* Checkout Modal */}
+      {/* Checkout / Settle Modal */}
       {showCheckoutModal && (
         <ModalShell
           open={showCheckoutModal}
-          title="Complete Payment"
+          title={
+            settleOrderId
+              ? "Collect Payment (Open Tab)"
+              : checkoutOnlineOrderId
+                ? "Complete Online Order"
+                : "Complete Payment"
+          }
           description={
-            checkoutOnlineOrderId
-              ? `Online order · ${onlineOrderBeingCheckedOut?.customerName || ""}`
-              : `Order total: ₱${finalTotal.toFixed(2)}`
+            settleOrderId
+              ? `Settling tab · ₱${finalTotal.toFixed(2)}`
+              : checkoutOnlineOrderId
+                ? `Online order · ${onlineOrderBeingCheckedOut?.customerName || ""}`
+                : `Order total: ₱${finalTotal.toFixed(2)}`
           }
           onClose={closeCheckoutModal}
           className="max-w-md"
         >
           <div className="space-y-6">
+            {/* Big total */}
             <div className="text-center">
               <div className="text-5xl font-bold tracking-tight">
                 ₱{finalTotal.toFixed(2)}
               </div>
-              {!checkoutOnlineOrderId && previewDiscount > 0 && (
-                <p className="mt-2 text-sm text-emerald-600">
-                  Includes −₱{previewDiscount.toFixed(2)} discount
-                </p>
-              )}
+              {!settleOrderId &&
+                !checkoutOnlineOrderId &&
+                previewDiscount > 0 && (
+                  <p className="mt-2 text-sm text-emerald-600">
+                    Includes −₱{previewDiscount.toFixed(2)} discount
+                  </p>
+                )}
             </div>
 
+            {/* ========== STEP D: Customer Name field ========== */}
+            {/* Only shows when creating a NEW Pay Later order */}
+            {!settleOrderId &&
+              !checkoutOnlineOrderId &&
+              selectedPaymentMethod === "PayLater" && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Customer Name <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="Juan Dela Cruz"
+                    value={payLaterCustomerName}
+                    onChange={(e) => setPayLaterCustomerName(e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+              )}
+            {/* ========== end of Step D ========== */}
+
+            {/* Payment method buttons */}
             <div className="space-y-3">
-              {(["Cash", "GCash", "Maya", "Card"] as PaymentMethod[]).map(
-                (method) => (
-                  <Button
-                    key={method}
-                    variant={
-                      selectedPaymentMethod === method ? "default" : "outline"
-                    }
-                    className="h-14 w-full justify-start text-base"
-                    onClick={() => setSelectedPaymentMethod(method)}
-                  >
-                    {method}
-                  </Button>
-                ),
-              )}
+              {(
+                ["Cash", "GCash", "Maya", "Card", "PayLater"] as PaymentMethod[]
+              ).map((method) => (
+                <Button
+                  key={method}
+                  variant={
+                    selectedPaymentMethod === method ? "default" : "outline"
+                  }
+                  className="h-14 w-full justify-start text-base"
+                  onClick={() => setSelectedPaymentMethod(method)}
+                  disabled={!!settleOrderId && method === "PayLater"}
+                >
+                  {method === "PayLater" ? "Pay Later (Open Tab)" : method}
+                </Button>
+              ))}
             </div>
 
+            {/* Amount tendered – only for Cash */}
             {selectedPaymentMethod === "Cash" && (
               <div>
                 <label className="mb-2 block text-sm font-medium">
@@ -1106,19 +1389,28 @@ export default function CashierPage() {
               </div>
             )}
 
+            {/* Confirm / Cancel buttons */}
             <div className="flex gap-3 pt-2">
               <Button
                 onClick={handleCheckout}
                 disabled={
                   isCheckingOut ||
-                  (selectedPaymentMethod === "Cash" && !amountTendered)
+                  (selectedPaymentMethod === "Cash" && !amountTendered) ||
+                  (!settleOrderId &&
+                    !checkoutOnlineOrderId &&
+                    selectedPaymentMethod === "PayLater" &&
+                    !payLaterCustomerName.trim())
                 }
                 className="flex-1 py-7 text-lg"
               >
                 {isCheckingOut && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Confirm Payment
+                {settleOrderId
+                  ? "Confirm Payment"
+                  : selectedPaymentMethod === "PayLater"
+                    ? "Place on Tab"
+                    : "Confirm Payment"}
               </Button>
               <Button
                 variant="outline"
