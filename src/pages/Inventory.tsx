@@ -1,73 +1,58 @@
-import { useState, useEffect, useMemo } from "react";
-import { inventoryService } from "@/services/inventory.service";
-import type { InventoryItemResponse } from "@/types";
+import { useEffect, useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, AlertTriangle, Loader2, Package, CheckCircle2 } from "lucide-react";
-import { toast } from "sonner";
-import { DataTable } from "@/components/common/DataTable";
-import { PageHeader } from "@/components/layout";
-import { ModalShell } from "@/components/dialogs/ModalShell";
 import { BadgePill } from "@/components/common/BadgePill";
-import { FormField } from "@/components/forms/form-field";
-import { FormSection } from "@/components/forms/form-section";
-import { cn } from "@/lib/utils";
+import { ModalShell } from "@/components/dialogs/ModalShell";
+import { inventoryService } from "@/services/inventory.service";
+import { toast } from "sonner";
+import {
+  Plus,
+  Package,
+  AlertTriangle,
+  RefreshCw,
+  Banknote,
+  Boxes,
+} from "lucide-react";
+import type { InventoryItemResponse } from "@/types";
 
-const UNIT_PRESETS = ["pcs", "kg", "g", "L", "mL", "bottles", "bags", "boxes"];
+const emptyCreate = {
+  name: "",
+  description: "",
+  initialStock: 0,
+  unit: "unit",
+  reorderPoint: 0,
+  reorderQuantity: 1,
+  unitCost: 0,
+};
+
+const emptyAdjust = {
+  quantityChange: 0,
+  reason: "",
+  unitCost: 0,
+};
 
 export default function InventoryPage() {
-  const [inventory, setInventory] = useState<InventoryItemResponse[]>([]);
+  const [items, setItems] = useState<InventoryItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [showAdjustModal, setShowAdjustModal] = useState(false);
-  const [selectedItem, setSelectedItem] =
-    useState<InventoryItemResponse | null>(null);
+  const [search, setSearch] = useState("");
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreate);
   const [creating, setCreating] = useState(false);
+
+  const [adjustItem, setAdjustItem] = useState<InventoryItemResponse | null>(
+    null,
+  );
+  const [adjustForm, setAdjustForm] = useState(emptyAdjust);
   const [adjusting, setAdjusting] = useState(false);
-  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    initialStock: 0,
-    unit: "pcs",
-    reorderPoint: 10,
-    reorderQuantity: 50,
-  });
-
-  const [adjustData, setAdjustData] = useState({
-    quantityChange: 0,
-    reason: "",
-  });
-
-  const nameError =
-    touched.name && !formData.name.trim() ? "Item name is required" : undefined;
-  const stockError =
-    touched.initialStock && formData.initialStock < 0
-      ? "Initial stock cannot be negative"
-      : undefined;
-  const reorderError =
-    touched.reorderPoint && formData.reorderPoint > 0 && formData.reorderQuantity <= 0
-      ? "Reorder quantity should be greater than 0"
-      : undefined;
-
-  const isFormValid =
-    formData.name.trim().length > 0 &&
-    formData.initialStock >= 0 &&
-    formData.reorderQuantity >= 0;
-
-  const stockLevel = useMemo(() => {
-    if (formData.reorderPoint <= 0) return "unmonitored";
-    if (formData.initialStock <= formData.reorderPoint) return "low";
-    return "healthy";
-  }, [formData.initialStock, formData.reorderPoint]);
-
-  const fetchInventory = async () => {
+  const fetchItems = async () => {
     try {
       setLoading(true);
       const res = await inventoryService.getInventory();
-      setInventory(res.data || []);
-    } catch (err) {
+      setItems(res.data || []);
+    } catch {
       toast.error("Failed to load inventory");
     } finally {
       setLoading(false);
@@ -75,440 +60,535 @@ export default function InventoryPage() {
   };
 
   useEffect(() => {
-    fetchInventory();
+    fetchItems();
   }, []);
 
-  const openCreateModal = () => {
-    setSelectedItem(null);
-    setTouched({});
-    setFormData({
-      name: "",
-      description: "",
-      initialStock: 0,
-      unit: "pcs",
-      reorderPoint: 10,
-      reorderQuantity: 50,
-    });
-    setShowModal(true);
-  };
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return items;
+    return items.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) || i.unit?.toLowerCase().includes(q),
+    );
+  }, [items, search]);
 
-  const openAdjustModal = (item: InventoryItemResponse) => {
-    setSelectedItem(item);
-    setAdjustData({ quantityChange: 0, reason: "" });
-    setShowAdjustModal(true);
-  };
+  const totalValue = items.reduce(
+    (s, i) => s + Number(i.currentStock ?? 0) * Number(i.unitCost ?? 0),
+    0,
+  );
+  const lowStockCount = items.filter((i) => i.isLowStock).length;
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTouched({ name: true, initialStock: true, reorderPoint: true });
-
-    if (!formData.name.trim()) {
-      toast.error("Item name is required");
+  const handleCreate = async () => {
+    if (!createForm.name.trim()) {
+      toast.error("Name is required");
       return;
     }
-    if (formData.initialStock < 0) {
-      toast.error("Initial stock cannot be negative");
+    if (createForm.unitCost < 0) {
+      toast.error("Unit cost cannot be negative");
       return;
     }
 
-    setCreating(true);
     try {
-      await inventoryService.createInventoryItem(formData);
-
-      toast.success(`✅ ${formData.name} created successfully!`, {
-        description: `Initial stock: ${formData.initialStock} ${formData.unit}`,
+      setCreating(true);
+      await inventoryService.createInventoryItem({
+        name: createForm.name.trim(),
+        description: createForm.description.trim() || undefined,
+        initialStock: createForm.initialStock,
+        unit: createForm.unit.trim() || "unit",
+        reorderPoint: createForm.reorderPoint,
+        reorderQuantity: createForm.reorderQuantity,
+        unitCost: createForm.unitCost,
       });
-
-      setShowModal(false);
-      fetchInventory(); // Refresh the list
+      toast.success("Inventory item created");
+      setShowCreate(false);
+      setCreateForm(emptyCreate);
+      fetchItems();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to create inventory item");
+      toast.error(err?.response?.data?.message || "Failed to create item");
     } finally {
       setCreating(false);
     }
   };
 
-  const handleAdjustStock = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedItem || !adjustData.reason.trim()) {
-      toast.error("Reason is required");
+  const openAdjust = (item: InventoryItemResponse) => {
+    setAdjustItem(item);
+    setAdjustForm({
+      quantityChange: 0,
+      reason: "",
+      unitCost: item.unitCost ?? 0,
+    });
+  };
+
+  const handleAdjust = async () => {
+    if (!adjustItem) return;
+    if (adjustForm.quantityChange === 0) {
+      toast.error("Quantity change cannot be zero");
+      return;
+    }
+    if (adjustForm.quantityChange > 0 && adjustForm.unitCost <= 0) {
+      toast.error("Unit cost is required when restocking");
       return;
     }
 
-    setAdjusting(true);
     try {
-      await inventoryService.adjustInventoryItem(selectedItem.id, adjustData);
-      toast.success("Stock updated successfully!");
-      setShowAdjustModal(false);
-      fetchInventory();
+      setAdjusting(true);
+      await inventoryService.adjustInventoryItem(adjustItem.id, {
+        quantityChange: adjustForm.quantityChange,
+        reason: adjustForm.reason.trim() || "Stock adjustment",
+        unitCost:
+          adjustForm.quantityChange > 0 ? adjustForm.unitCost : undefined,
+      });
+      toast.success(
+        adjustForm.quantityChange > 0 ? "Stock restocked" : "Stock deducted",
+      );
+      setAdjustItem(null);
+      setAdjustForm(emptyAdjust);
+      fetchItems();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to update stock");
+      toast.error(err?.response?.data?.message || "Failed to adjust stock");
     } finally {
       setAdjusting(false);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (
-      !confirm(
-        "Are you sure you want to permanently delete this inventory item?",
-      )
-    )
-      return;
-
-    try {
-      await inventoryService.deleteInventoryItem(id);
-      toast.success("Inventory item deleted successfully");
-      fetchInventory();
-    } catch (err: any) {
-      toast.error(
-        err.response?.data?.message ||
-          "Failed to delete item. It may be linked to menu items.",
-      );
-    }
-  };
-
-  const columns = [
-    { header: "Item Name", accessor: "name" as const },
-    { header: "Unit", accessor: "unit" as const },
-    { header: "Current Stock", accessor: "currentStock" as const },
-    { header: "Reorder Point", accessor: "reorderPoint" as const },
-    {
-      header: "Status",
-      accessor: (item: InventoryItemResponse) =>
-        item.isLowStock ? (
-          <BadgePill tone="warning" className="gap-1">
-            <AlertTriangle size={16} /> Low Stock
-          </BadgePill>
-        ) : (
-          <BadgePill tone="success">In Stock</BadgePill>
-        ),
-    },
-  ];
-
-  const actions = (item: InventoryItemResponse) => (
-    <div className="flex gap-2 justify-end">
-      <Button variant="outline" size="sm" onClick={() => openAdjustModal(item)}>
-        Update Stock
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="text-red-600 hover:bg-red-50"
-        onClick={() => handleDelete(item.id)}
-      >
-        <Trash2 className="w-4 h-4" />
-      </Button>
-    </div>
-  );
-
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <PageHeader
-        title="Inventory Management"
-        actions={
-          <Button onClick={openCreateModal}>
-            <Plus className="w-4 h-4 mr-2" /> New Item
-          </Button>
-        }
-      />
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-heading text-3xl font-semibold tracking-tight md:text-4xl">
+            Inventory
+          </h1>
+          <p className="mt-1 text-muted-foreground">
+            Track stock levels, unit costs, and inventory value.
+          </p>
+        </div>
+        <Button
+          className="rounded-2xl gap-2"
+          onClick={() => {
+            setCreateForm(emptyCreate);
+            setShowCreate(true);
+          }}
+        >
+          <Plus className="h-4 w-4" />
+          Add Item
+        </Button>
+      </div>
 
-      <DataTable
-        data={inventory}
-        columns={columns}
-        loading={loading}
-        actions={actions}
-        emptyMessage="No inventory items found."
-      />
-
-      <ModalShell
-        open={showModal}
-        title="New Inventory Item"
-        description="Add a stock item and its reorder thresholds."
-        onClose={() => setShowModal(false)}
-        className="max-w-lg"
-      >
-        <form onSubmit={handleCreate} className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300">
-                <Package className="h-3.5 w-3.5" />
-              </div>
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                Item details
-              </h3>
+      {/* Stats */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card className="border-border/40 bg-gradient-to-br from-white to-zinc-50/80 shadow-sm dark:from-zinc-950 dark:to-zinc-900/50">
+          <CardContent className="p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 text-white">
+              <Boxes className="h-5 w-5" />
             </div>
+            <p className="mt-4 text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
+              Total Items
+            </p>
+            <p className="mt-1 font-heading text-3xl font-semibold">
+              {items.length}
+            </p>
+          </CardContent>
+        </Card>
 
-            <FormField
-              label="Item name"
-              error={nameError}
-            >
-              <Input
-                placeholder="Espresso beans"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-                aria-invalid={Boolean(nameError)}
-                required
-              />
-            </FormField>
+        <Card className="border-border/40 bg-gradient-to-br from-white to-zinc-50/80 shadow-sm dark:from-zinc-950 dark:to-zinc-900/50">
+          <CardContent className="p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white">
+              <Banknote className="h-5 w-5" />
+            </div>
+            <p className="mt-4 text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
+              Inventory Value
+            </p>
+            <p className="mt-1 font-heading text-3xl font-semibold">
+              ₱
+              {totalValue.toLocaleString("en-PH", {
+                minimumFractionDigits: 2,
+              })}
+            </p>
+          </CardContent>
+        </Card>
 
-            <FormField label="Description">
+        <Card className="border-border/40 bg-gradient-to-br from-white to-zinc-50/80 shadow-sm dark:from-zinc-950 dark:to-zinc-900/50">
+          <CardContent className="p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <p className="mt-4 text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
+              Low Stock
+            </p>
+            <p className="mt-1 font-heading text-3xl font-semibold">
+              {lowStockCount}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Table */}
+      <Card className="border-border/60 bg-white/80 shadow-sm dark:bg-zinc-950/50">
+        <CardContent className="p-6">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-heading text-xl font-semibold tracking-tight">
+                Stock List
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Unit cost and stock value per item.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
               <Input
-                placeholder="Dark roast, whole bean (optional)"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
+                placeholder="Search inventory..."
+                className="max-w-xs rounded-2xl"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
               />
-            </FormField>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-xl"
+                onClick={fetchItems}
+                disabled={loading}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+                />
+              </Button>
+            </div>
           </div>
 
-          <div className="h-px bg-border/60" />
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-14 animate-pulse rounded-2xl bg-zinc-100 dark:bg-zinc-800"
+                />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
+              <Package className="mx-auto mb-3 h-8 w-8 opacity-40" />
+              <p>No inventory items found.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-border/60 text-left text-muted-foreground">
+                    <th className="pb-3 pr-4 font-medium">Item</th>
+                    <th className="pb-3 pr-4 font-medium">Stock</th>
+                    <th className="pb-3 pr-4 font-medium">Unit Cost</th>
+                    <th className="pb-3 pr-4 font-medium">Value</th>
+                    <th className="pb-3 pr-4 font-medium">Reorder</th>
+                    <th className="pb-3 pr-4 font-medium">Status</th>
+                    <th className="pb-3 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="border-b border-border/40 last:border-0"
+                    >
+                      <td className="py-3.5 pr-4">
+                        <p className="font-medium">{item.name}</p>
+                        {item.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {item.description}
+                          </p>
+                        )}
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        {item.currentStock} {item.unit}
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        ₱
+                        {(item.unitCost ?? 0).toLocaleString("en-PH", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className="py-3.5 pr-4 font-medium text-amber-700 dark:text-amber-400">
+                        ₱
+                        {(
+                          Number(item.currentStock ?? 0) *
+                          Number(item.unitCost ?? 0)
+                        ).toLocaleString("en-PH", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className="py-3.5 pr-4 text-muted-foreground">
+                        ≤ {item.reorderPoint} {item.unit}
+                      </td>
+                      <td className="py-3.5 pr-4">
+                        <BadgePill
+                          tone={item.isLowStock ? "warning" : "success"}
+                        >
+                          {item.isLowStock ? "Low" : "OK"}
+                        </BadgePill>
+                      </td>
+                      <td className="py-3.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl"
+                          onClick={() => openAdjust(item)}
+                        >
+                          Adjust
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
+      {/* Create Modal */}
+      {showCreate && (
+        <ModalShell
+          open={showCreate}
+          title="Add Inventory Item"
+          description="Set initial stock and unit cost."
+          onClose={() => setShowCreate(false)}
+          className="max-w-lg"
+        >
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300">
-                <AlertTriangle className="h-3.5 w-3.5" />
-              </div>
-              <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                Stock rules
-              </h3>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Name</label>
+              <Input
+                value={createForm.name}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, name: e.target.value })
+                }
+                placeholder="Coffee Beans"
+                className="rounded-xl"
+              />
             </div>
 
-            <FormField label="Initial stock" error={stockError}>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                Description
+              </label>
+              <Input
+                value={createForm.description}
+                onChange={(e) =>
+                  setCreateForm({ ...createForm, description: e.target.value })
+                }
+                placeholder="Optional"
+                className="rounded-xl"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Initial Stock
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={createForm.initialStock}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      initialStock: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  className="rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Unit</label>
+                <Input
+                  value={createForm.unit}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, unit: e.target.value })
+                  }
+                  placeholder="kg, pcs, L..."
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                Unit Cost (₱) <span className="text-red-500">*</span>
+              </label>
               <Input
                 type="number"
                 min={0}
                 step="0.01"
-                value={formData.initialStock}
+                value={createForm.unitCost}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    initialStock: parseFloat(e.target.value) || 0,
+                  setCreateForm({
+                    ...createForm,
+                    unitCost: parseFloat(e.target.value) || 0,
                   })
                 }
-                onBlur={() => setTouched((t) => ({ ...t, initialStock: true }))}
-                aria-invalid={Boolean(stockError)}
+                className="rounded-xl"
               />
-            </FormField>
-
-            <FormField label="Unit">
-              <div className="grid grid-cols-4 gap-1.5">
-                {UNIT_PRESETS.map((unit) => (
-                  <button
-                    key={unit}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, unit })}
-                    className={cn(
-                      "rounded-xl border px-2 py-1.5 text-xs font-medium transition-all",
-                      formData.unit === unit
-                        ? "border-transparent bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950"
-                        : "border-border/70 bg-white text-muted-foreground hover:border-zinc-300 hover:text-foreground dark:bg-zinc-900 dark:hover:border-zinc-700",
-                    )}
-                  >
-                    {unit}
-                  </button>
-                ))}
-              </div>
-              <Input
-                value={formData.unit}
-                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                placeholder="Or type a custom unit"
-                className="mt-1.5"
-              />
-            </FormField>
-
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="Reorder point" error={reorderError}>
-                <Input
-                  type="number"
-                  min={0}
-                  value={formData.reorderPoint}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      reorderPoint: parseInt(e.target.value) || 0,
-                    })
-                  }
-                  onBlur={() => setTouched((t) => ({ ...t, reorderPoint: true }))}
-                />
-              </FormField>
-
-              <FormField label="Reorder qty">
-                <Input
-                  type="number"
-                  min={0}
-                  value={formData.reorderQuantity}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      reorderQuantity: parseInt(e.target.value) || 0,
-                    })
-                  }
-                />
-              </FormField>
-            </div>
-
-            {/* Live preview */}
-            <div
-              className={cn(
-                "flex items-start gap-2.5 rounded-2xl p-3.5 transition-colors",
-                stockLevel === "low"
-                  ? "bg-amber-50 dark:bg-amber-500/10"
-                  : stockLevel === "unmonitored"
-                    ? "bg-muted/40"
-                    : "bg-emerald-50 dark:bg-emerald-500/10",
-              )}
-            >
-              <div
-                className={cn(
-                  "mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg",
-                  stockLevel === "low"
-                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-300"
-                    : stockLevel === "unmonitored"
-                      ? "bg-zinc-500/10 text-zinc-500"
-                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
-                )}
-              >
-                {stockLevel === "low" ? (
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                ) : stockLevel === "unmonitored" ? (
-                  <Package className="h-3.5 w-3.5" />
-                ) : (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                )}
-              </div>
-              <p className="text-xs leading-5 text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  {formData.name.trim() || "This item"} starts at {formData.initialStock}{" "}
-                  {formData.unit || "units"}.
-                </span>{" "}
-                {stockLevel === "low"
-                  ? `That's at or below its reorder point, so it'll show as Low Stock right away.`
-                  : stockLevel === "unmonitored"
-                    ? "Set a reorder point above 0 to get low-stock alerts."
-                    : `Stays In Stock until it drops to ${formData.reorderPoint} ${formData.unit || "units"}.`}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-1">
-            <Button type="submit" className="flex-1" disabled={!isFormValid || creating}>
-              {creating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create item"
-              )}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => setShowModal(false)}
-              disabled={creating}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      </ModalShell>
-
-      <ModalShell
-        open={showAdjustModal && Boolean(selectedItem)}
-        title={
-          selectedItem ? `Update Stock - ${selectedItem.name}` : "Update Stock"
-        }
-        description={
-          selectedItem
-            ? `Current: ${selectedItem.currentStock} ${selectedItem.unit}`
-            : undefined
-        }
-        onClose={() => setShowAdjustModal(false)}
-        className="max-w-lg"
-      >
-        {selectedItem ? (
-          <form onSubmit={handleAdjustStock} className="space-y-5">
-            <FormSection
-              title="Stock adjustment"
-              description="Use positive values for restocks and negative values for usage or corrections."
-            >
-              <FormField
-                label="Quantity change (+ or -)"
-                description="Example: 50, -10, or 12.5"
-              >
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={adjustData.quantityChange}
-                  onChange={(e) =>
-                    setAdjustData({
-                      ...adjustData,
-                      quantityChange: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  placeholder="50 or -10"
-                  required
-                />
-              </FormField>
-
-              {adjustData.quantityChange !== 0 && (
-                <p
-                  className={cn(
-                    "text-sm font-medium",
-                    adjustData.quantityChange > 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-red-600 dark:text-red-400",
-                  )}
-                >
-                  New stock will be{" "}
-                  {(selectedItem.currentStock + adjustData.quantityChange).toFixed(2)}{" "}
-                  {selectedItem.unit}
+              {createForm.initialStock > 0 && createForm.unitCost > 0 && (
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Opening value: ₱
+                  {(
+                    createForm.initialStock * createForm.unitCost
+                  ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                 </p>
               )}
+            </div>
 
-              <FormField
-                label="Reason"
-                description="Required for audit tracking and future stock history."
-              >
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Reorder Point
+                </label>
                 <Input
-                  placeholder="Restock, Usage, Correction..."
-                  value={adjustData.reason}
+                  type="number"
+                  min={0}
+                  value={createForm.reorderPoint}
                   onChange={(e) =>
-                    setAdjustData({ ...adjustData, reason: e.target.value })
+                    setCreateForm({
+                      ...createForm,
+                      reorderPoint: parseFloat(e.target.value) || 0,
+                    })
                   }
-                  required
+                  className="rounded-xl"
                 />
-              </FormField>
-            </FormSection>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Reorder Qty
+                </label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={createForm.reorderQuantity}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      reorderQuantity: parseFloat(e.target.value) || 1,
+                    })
+                  }
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" className="flex-1" disabled={adjusting}>
-                {adjusting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Updating...
-                  </>
-                ) : (
-                  "Update stock"
-                )}
+              <Button
+                onClick={handleCreate}
+                disabled={creating}
+                className="flex-1 rounded-xl"
+              >
+                {creating ? "Creating..." : "Create"}
               </Button>
               <Button
-                type="button"
                 variant="outline"
-                className="flex-1"
-                onClick={() => setShowAdjustModal(false)}
+                className="flex-1 rounded-xl"
+                onClick={() => setShowCreate(false)}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {/* Adjust Modal */}
+      {adjustItem && (
+        <ModalShell
+          open={!!adjustItem}
+          title={`Adjust — ${adjustItem.name}`}
+          description={`Current stock: ${adjustItem.currentStock} ${adjustItem.unit}`}
+          onClose={() => setAdjustItem(null)}
+          className="max-w-md"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">
+                Quantity Change
+              </label>
+              <Input
+                type="number"
+                value={adjustForm.quantityChange}
+                onChange={(e) =>
+                  setAdjustForm({
+                    ...adjustForm,
+                    quantityChange: parseFloat(e.target.value) || 0,
+                  })
+                }
+                placeholder="+10 to restock, -5 to remove"
+                className="rounded-xl"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use positive to restock, negative to deduct.
+              </p>
+            </div>
+
+            {adjustForm.quantityChange > 0 && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Unit Cost (₱) <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={adjustForm.unitCost}
+                  onChange={(e) =>
+                    setAdjustForm({
+                      ...adjustForm,
+                      unitCost: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  className="rounded-xl"
+                />
+                {adjustForm.unitCost > 0 && (
+                  <p className="mt-1.5 text-sm text-muted-foreground">
+                    Line total: ₱
+                    {(
+                      adjustForm.quantityChange * adjustForm.unitCost
+                    ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Reason</label>
+              <Input
+                value={adjustForm.reason}
+                onChange={(e) =>
+                  setAdjustForm({ ...adjustForm, reason: e.target.value })
+                }
+                placeholder="Supplier delivery, spoilage, etc."
+                className="rounded-xl"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={handleAdjust}
+                disabled={adjusting}
+                className="flex-1 rounded-xl"
+              >
+                {adjusting ? "Saving..." : "Save Adjustment"}
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => setAdjustItem(null)}
                 disabled={adjusting}
               >
                 Cancel
               </Button>
             </div>
-          </form>
-        ) : null}
-      </ModalShell>
+          </div>
+        </ModalShell>
+      )}
     </div>
   );
 }

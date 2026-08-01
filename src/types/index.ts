@@ -125,7 +125,26 @@ export interface InventoryItemResponse {
   reorderQuantity: number;
   isActive: boolean;
   isLowStock: boolean;
+  unitCost: number;
+  lastPurchaseCost?: number;
+  stockValue: number;
   createdAt: string;
+  updatedAt?: string;
+}
+export interface CreateInventoryItemRequest {
+  name: string;
+  description?: string;
+  initialStock: number;
+  unit: string;
+  reorderPoint: number;
+  reorderQuantity: number;
+  unitCost: number;
+}
+
+export interface AdjustStockRequest {
+  quantityChange: number;
+  reason: string;
+  unitCost?: number;
 }
 
 // === OTHER TYPES ===
@@ -139,16 +158,6 @@ export interface User {
   isActive: boolean;
   createdAt: string;
   lastLoginAt?: string;
-}
-
-export interface DashboardResponse {
-  todaySales: number;
-  ordersToday: number;
-  openOrders: number;
-  lowStockItems: number;
-  activeStaff: number;
-  topSellingItems: TopSellingItem[];
-  lastUpdated: string;
 }
 
 export interface TopSellingItem {
@@ -189,6 +198,8 @@ export interface DashboardResponse {
   openOrders: number;
   lowStockItems: number;
   activeStaff: number;
+  inventoryValue?: number;
+  todayPurchaseCost?: number;
   topSellingItems: TopSellingItem[];
   activityLog?: ActivityLogEntry[];
   lastUpdated: string;
@@ -233,4 +244,9 @@ export interface CreatePromotionRequest {
 
 export interface UpdatePromotionRequest extends CreatePromotionRequest {
   isActive: boolean;
+}
+
+export interface OnlineCartItem {
+  menuItem: MenuItem;
+  quantity: number;
 }

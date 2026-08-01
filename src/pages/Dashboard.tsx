@@ -8,8 +8,8 @@ import { dashboardService } from "@/services/dashboard.service";
 import {
   TrendingUp,
   Coffee,
-  Clock,
   AlertTriangle,
+  ShoppingBag,
   Users,
   RefreshCw,
   Wifi,
@@ -63,6 +63,17 @@ export default function DashboardPage() {
       bg: "bg-amber-50 dark:bg-amber-950/30",
     },
     {
+      label: "Purchases Today",
+      value: `₱${(data?.todayPurchaseCost ?? 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+      })}`,
+      icon: ShoppingBag,
+      accent: "from-rose-500 to-red-600",
+      bg: "bg-rose-50 dark:bg-rose-950/30",
+      valueClassName: "text-red-600 dark:text-red-400",
+      hint: "Restocks recorded today",
+    },
+    {
       label: "Orders Today",
       value: data?.ordersToday ?? 0,
       icon: Coffee,
@@ -70,17 +81,11 @@ export default function DashboardPage() {
       bg: "bg-blue-50 dark:bg-blue-950/30",
     },
     {
-      label: "Open Orders",
-      value: data?.openOrders ?? 0,
-      icon: Clock,
-      accent: "from-violet-500 to-purple-600",
-      bg: "bg-violet-50 dark:bg-violet-950/30",
-    },
-    {
       label: "Low Stock Items",
       value: data?.lowStockItems ?? 0,
       icon: AlertTriangle,
       accent: "from-rose-500 to-red-600",
+      valueClassName: "text-red-600 dark:text-red-400",
       bg: "bg-rose-50 dark:bg-rose-950/30",
     },
     {
@@ -142,7 +147,7 @@ export default function DashboardPage() {
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
                   <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${stat.accent} text-white shadow-sm`}
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${stat.accent ?? "from-zinc-500 to-zinc-700"} text-white shadow-sm`}
                   >
                     <Icon className="h-5 w-5" />
                   </div>
@@ -152,7 +157,9 @@ export default function DashboardPage() {
                   <p className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
                     {stat.label}
                   </p>
-                  <p className="mt-2 font-heading text-3xl font-semibold tracking-tight">
+                  <p
+                    className={`mt-2 font-heading text-3xl font-semibold tracking-tight ${stat.valueClassName ?? ""}`}
+                  >
                     {stat.value}
                   </p>
                 </div>
