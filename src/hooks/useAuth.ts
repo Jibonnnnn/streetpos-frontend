@@ -31,8 +31,11 @@ export const useAuth = () => {
   };
 
   const logout = () => {
+    localStorage.removeItem('token');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('fullName');
+    localStorage.removeItem('userRole');
     setUser(null);
   };
 

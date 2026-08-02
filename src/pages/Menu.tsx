@@ -10,7 +10,7 @@ import type {
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Edit, ImageIcon } from "lucide-react";
+import { Plus, Edit, ImageIcon, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/layout";
@@ -19,6 +19,21 @@ import { ModalShell } from "@/components/dialogs/ModalShell";
 import { BadgePill } from "@/components/common/BadgePill";
 import { FormField } from "@/components/forms/form-field";
 import { FormSection } from "@/components/forms/form-section";
+import {
+  MenuItemAddonsSection,
+  attachGroupsAfterCreate,
+} from "@/components/addons/MenuItemAddonsSection";
+
+const emptyForm = {
+  name: "",
+  description: "",
+  categoryId: 0,
+  price: 0,
+  displayOrder: 0,
+  availableFrom: "",
+  availableUntil: "",
+  inventoryLinks: [] as MenuItemInventoryLinkRequest[],
+};
 
 export default function MenuPage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -29,20 +44,16 @@ export default function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showAddonsModal, setShowAddonsModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [editingAddonsItem, setEditingAddonsItem] = useState<MenuItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [categorySubmitting, setCategorySubmitting] = useState(false);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    categoryId: 0,
-    price: 0,
-    displayOrder: 0,
-    availableFrom: "",
-    availableUntil: "",
-    inventoryLinks: [] as MenuItemInventoryLinkRequest[],
-  });
+  const [formData, setFormData] = useState({ ...emptyForm });
+  const [selectedAddonGroupIds, setSelectedAddonGroupIds] = useState<number[]>(
+    [],
+  );
 
   const [categoryForm, setCategoryForm] = useState({
     name: "",
@@ -58,7 +69,6 @@ export default function MenuPage() {
     const linkedIds = new Set(
       formData.inventoryLinks.map((l) => l.inventoryItemId),
     );
-
     return [
       ...active,
       ...inventoryItems.filter(
@@ -67,156 +77,175 @@ export default function MenuPage() {
     ];
   }, [inventoryItems, formData.inventoryLinks]);
 
-  useEffect(() => {
-    return () => {
-      if (imagePreview?.startsWith("blob:")) {
-        URL.revokeObjectURL(imagePreview);
-      }
-    };
-  }, [imagePreview]);
-
-  const fetchMenu = async () => {
+  const fetchMenu = useCallback(async () => {
     try {
-      setLoading(true);
-      const res = await menuService.getMenu(true); // ← includeInactive = true
-      setMenuItems(res.data || []);
-    } catch (err) {
+      const res = await menuService.getMenu(/* includeInactive? */ true);
+      setMenuItems(res.data ?? res ?? []);
+    } catch {
       toast.error("Failed to load menu items");
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const fetchInventory = async () => {
-    try {
-      const res = await inventoryService.getInventory();
-      setInventoryItems(res.data || []);
-    } catch (err) {
-      toast.error("Failed to load inventory items");
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const res = await categoryService.getAll();
-      setCategories(res.data.filter((c) => c.isActive));
-    } catch (err) {
-      toast.error("Failed to load categories");
-    }
-  };
-
-  useEffect(() => {
-    fetchMenu();
-    fetchInventory();
-    fetchCategories();
   }, []);
 
-  const openMenuModal = (item?: MenuItem) => {
-    if (item) {
-      setEditingItem(item);
-      setFormData({
-        name: item.name,
-        description: item.description || "",
-        categoryId: item.categoryId,
-        price: item.price,
-        displayOrder: item.displayOrder,
-        availableFrom: item.availableFrom || "",
-        availableUntil: item.availableUntil || "",
-        inventoryLinks: item.inventoryLinks.map((l) => ({
-          inventoryItemId: l.inventoryItemId,
-          quantityUsedPerUnit: l.quantityUsedPerUnit,
-        })),
-      });
-      setImagePreview(getFullImageUrl(item.imageFileName ?? item.imageUrl));
-    } else {
-      setEditingItem(null);
-      setFormData({
-        name: "",
-        description: "",
-        categoryId: 0,
-        price: 0,
-        displayOrder: 0,
-        availableFrom: "",
-        availableUntil: "",
-        inventoryLinks: [],
-      });
-      setImagePreview(null);
+  const fetchInventory = useCallback(async () => {
+    try {
+      const res = await inventoryService.getInventory();
+      setInventoryItems(res.data ?? res ?? []);
+    } catch {
+      /* optional */
     }
+  }, []);
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await categoryService.getAll();
+      setCategories(res.data ?? res ?? []);
+    } catch {
+      toast.error("Failed to load categories");
+    }
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchMenu(), fetchInventory(), fetchCategories()]);
+    setLoading(false);
+  }, [fetchMenu, fetchInventory, fetchCategories]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const resetForm = () => {
+    setFormData({ ...emptyForm });
+    setSelectedAddonGroupIds([]);
     setImageFile(null);
+    setImagePreview(null);
+    setEditingItem(null);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    if (categories.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        categoryId: categories[0].id,
+      }));
+    }
     setShowModal(true);
   };
 
-  const openCategoryModal = () => {
-    setCategoryForm({ name: "", description: "", displayOrder: 0 });
-    setShowCategoryModal(true);
+  const openEdit = (item: MenuItem) => {
+    setEditingItem(item);
+    setFormData({
+      name: item.name,
+      description: item.description ?? "",
+      categoryId: item.categoryId,
+      price: item.price,
+      displayOrder: item.displayOrder ?? 0,
+      availableFrom: item.availableFrom
+        ? String(item.availableFrom).slice(0, 5)
+        : "",
+      availableUntil: item.availableUntil
+        ? String(item.availableUntil).slice(0, 5)
+        : "",
+      inventoryLinks: (item.inventoryLinks ?? []).map((l) => ({
+        inventoryItemId: l.inventoryItemId,
+        quantityUsedPerUnit: l.quantityUsedPerUnit,
+      })),
+    });
+    // Edit mode: MenuItemAddonsSection loads linked groups itself via menuItemId
+    setSelectedAddonGroupIds(
+      (item.modifierGroups ?? []).map((g) => g.id).filter(Boolean),
+    );
+    setImageFile(null);
+    setImagePreview(
+      item.imageFileName || item.imageUrl
+        ? getFullImageUrl(item.imageFileName ?? item.imageUrl) || null
+        : null,
+    );
+    setShowModal(true);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image size must be less than 5MB");
-        return;
-      }
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
+  const openAddons = (item: MenuItem) => {
+    setEditingAddonsItem(item);
+    setShowAddonsModal(true);
   };
 
-  const addInventoryLink = useCallback(() => {
-    if (ingredientOptions.length === 0) {
-      toast.error("No active inventory items available");
+  const closeModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
+
+  const closeAddonsModal = () => {
+    setShowAddonsModal(false);
+    setEditingAddonsItem(null);
+  };
+
+  const addInventoryLink = () => {
+    const first = ingredientOptions[0];
+    if (!first) {
+      toast.error("No inventory items available");
       return;
     }
-
     setFormData((prev) => ({
       ...prev,
       inventoryLinks: [
         ...prev.inventoryLinks,
-        {
-          inventoryItemId: ingredientOptions[0].id,
-          quantityUsedPerUnit: 1,
-        },
+        { inventoryItemId: first.id, quantityUsedPerUnit: 1 },
       ],
     }));
-  }, [ingredientOptions]);
+  };
 
-  const updateInventoryLink = useCallback(
-    (
-      index: number,
-      field: "inventoryItemId" | "quantityUsedPerUnit",
-      value: number,
-    ) => {
-      setFormData((prev) => {
-        const newLinks = [...prev.inventoryLinks];
-        newLinks[index] = { ...newLinks[index], [field]: value };
-        return { ...prev, inventoryLinks: newLinks };
-      });
-    },
-    [],
-  );
+  const updateInventoryLink = (
+    index: number,
+    patch: Partial<MenuItemInventoryLinkRequest>,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      inventoryLinks: prev.inventoryLinks.map((l, i) =>
+        i === index ? { ...l, ...patch } : l,
+      ),
+    }));
+  };
 
-  const removeInventoryLink = useCallback((index: number) => {
+  const removeInventoryLink = (index: number) => {
     setFormData((prev) => ({
       ...prev,
       inventoryLinks: prev.inventoryLinks.filter((_, i) => i !== index),
     }));
-  }, []);
+  };
 
-  const handleMenuSubmit = async (e: React.FormEvent) => {
+  const onImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
+
+    if (!formData.name.trim()) {
+      toast.error("Name is required");
+      return;
+    }
+    if (!formData.categoryId) {
+      toast.error("Category is required");
+      return;
+    }
+    if (formData.price < 0) {
+      toast.error("Price cannot be negative");
+      return;
+    }
 
     setSubmitting(true);
 
     const formDataToSend = new FormData();
     formDataToSend.append("name", formData.name.trim());
-    formDataToSend.append("categoryId", formData.categoryId.toString());
-    formDataToSend.append("price", formData.price.toString());
-    formDataToSend.append("displayOrder", formData.displayOrder.toString());
-
-    if (formData.description?.trim())
-      formDataToSend.append("description", formData.description.trim());
+    formDataToSend.append("categoryId", String(formData.categoryId));
+    formDataToSend.append("price", String(formData.price));
+    formDataToSend.append("displayOrder", String(formData.displayOrder || 0));
+    formDataToSend.append("description", formData.description.trim());
 
     if (formData.availableFrom)
       formDataToSend.append("availableFrom", formData.availableFrom);
@@ -235,20 +264,25 @@ export default function MenuPage() {
     try {
       if (editingItem) {
         await menuService.updateMenuItem(editingItem.id, formDataToSend);
+        // Groups are already attached/detached live by MenuItemAddonsSection in edit mode
         toast.success("Menu item updated successfully!");
       } else {
-        await menuService.createMenuItem(formDataToSend);
+        const created = await menuService.createMenuItem(formDataToSend);
+        // Support both axios-style { data } and plain object returns
+        const newId =
+          (created as any)?.data?.id ?? (created as any)?.id ?? null;
+
+        if (newId && selectedAddonGroupIds.length > 0) {
+          await attachGroupsAfterCreate(newId, selectedAddonGroupIds);
+        }
+
         toast.success("Menu item created successfully!");
       }
 
-      setShowModal(false);
-      // Refresh BOTH lists
+      closeModal();
       await Promise.all([fetchMenu(), fetchCategories()]);
-      // Reset form
-      setImageFile(null);
-      setImagePreview(null);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to save menu item");
+      toast.error(err?.response?.data?.message || "Failed to save menu item");
     } finally {
       setSubmitting(false);
     }
@@ -259,15 +293,14 @@ export default function MenuPage() {
     if (categorySubmitting || !categoryForm.name.trim()) return;
 
     setCategorySubmitting(true);
-
     try {
       await categoryService.create(categoryForm);
       toast.success("Category created successfully!");
       setShowCategoryModal(false);
       setCategoryForm({ name: "", description: "", displayOrder: 0 });
-      await fetchCategories(); // Refresh dropdown
+      await fetchCategories();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to create category");
+      toast.error(err?.response?.data?.message || "Failed to create category");
     } finally {
       setCategorySubmitting(false);
     }
@@ -278,13 +311,14 @@ export default function MenuPage() {
       !confirm("Disable this menu item? It will no longer appear in the POS.")
     )
       return;
-
     try {
       await menuService.deleteMenuItem(id);
       toast.success("Menu item disabled");
       fetchMenu();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to disable menu item");
+      toast.error(
+        err?.response?.data?.message || "Failed to disable menu item",
+      );
     }
   };
 
@@ -294,356 +328,425 @@ export default function MenuPage() {
       toast.success("Menu item enabled");
       fetchMenu();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to enable menu item");
+      toast.error(err?.response?.data?.message || "Failed to enable menu item");
     }
   };
 
   const columns = [
     {
+      key: "image",
+      accessor: "imageFileName" as keyof MenuItem,
       header: "Image",
-      accessor: (item: MenuItem) => {
-        const url = getFullImageUrl(item.imageFileName ?? item.imageUrl);
-        return (
-          <div className="w-12 h-12 bg-zinc-100 rounded-xl overflow-hidden border border-zinc-200">
-            {url ? (
-              <img
-                src={url}
-                alt={item.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center text-3xl opacity-30">
-                ☕
-              </div>
-            )}
+      className: "w-20",
+      render: (row: MenuItem) => {
+        const src = getFullImageUrl(row.imageFileName ?? row.imageUrl);
+        return src ? (
+          <img src={src} alt="" className="h-10 w-10 rounded-xl object-cover" />
+        ) : (
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <ImageIcon className="h-4 w-4" />
           </div>
         );
       },
     },
-    { header: "Name", accessor: "name" as const },
     {
-      header: "Category",
-      accessor: (item: MenuItem) => item.categoryName || "Uncategorized",
+      key: "name",
+      accessor: "name" as keyof MenuItem,
+      header: "Item",
+      className: "min-w-56",
+      render: (row: MenuItem) => (
+        <div>
+          <p className="font-medium">{row.name}</p>
+          <p className="text-xs text-muted-foreground">{row.categoryName}</p>
+        </div>
+      ),
     },
     {
+      key: "price",
+      accessor: "price" as keyof MenuItem,
       header: "Price",
-      accessor: (item: MenuItem) => `₱${item.price.toFixed(2)}`,
+      className: "w-28",
+      render: (row: MenuItem) => (
+        <span className="font-semibold text-amber-600">
+          ₱{Number(row.price).toFixed(2)}
+        </span>
+      ),
     },
     {
+      key: "addons",
+      accessor: "id" as keyof MenuItem,
+      header: "Add-ons",
+      className: "w-28",
+      render: (row: MenuItem) => {
+        const count = row.modifierGroups?.length ?? 0;
+        return (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-auto rounded-full px-0 text-left hover:bg-transparent"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openAddons(row);
+            }}
+          >
+            {count > 0 ? (
+              <BadgePill tone="info">
+                {count} group{count !== 1 ? "s" : ""}
+              </BadgePill>
+            ) : (
+              <span className="text-xs text-muted-foreground underline decoration-dotted underline-offset-4">
+                Choose groups
+              </span>
+            )}
+          </Button>
+        );
+      },
+    },
+    {
+      key: "status",
+      accessor: "isActive" as keyof MenuItem,
       header: "Status",
-      accessor: (item: MenuItem) => (
-        <BadgePill tone={item.isActive ? "success" : "danger"}>
-          {item.isActive ? "Active" : "Disabled"}
-        </BadgePill>
+      className: "w-28",
+      render: (row: MenuItem) =>
+        row.isActive ? (
+          <BadgePill tone="success">Active</BadgePill>
+        ) : (
+          <BadgePill tone="neutral">Disabled</BadgePill>
+        ),
+    },
+    {
+      key: "actions",
+      accessor: "id" as keyof MenuItem,
+      header: "",
+      className: "w-40",
+      render: (row: MenuItem) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-xl"
+            onClick={() => openEdit(row)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          {row.isActive ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl text-red-500"
+              onClick={() => handleDeactivate(row.id)}
+            >
+              Disable
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl"
+              onClick={() => handleActivate(row.id)}
+            >
+              Enable
+            </Button>
+          )}
+        </div>
       ),
     },
   ];
 
-  const actions = (item: MenuItem) => (
-    <div className="flex gap-2">
-      <Button variant="outline" size="sm" onClick={() => openMenuModal(item)}>
-        <Edit className="w-4 h-4" />
-      </Button>
-
-      {item.isActive ? (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleDeactivate(item.id)}
-          className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-        >
-          Disable
-        </Button>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleActivate(item.id)}
-          className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-        >
-          Enable
-        </Button>
-      )}
-    </div>
-  );
-
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <PageHeader
         title="Menu Management"
-        description="Manage your café's menu items, pricing, availability, and ingredient links."
+        description="Create items, link inventory, and attach add-on groups for POS and online orders."
         actions={
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => openMenuModal()}>
-              <Plus className="w-4 h-4 mr-2" /> Add New Item
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={loadAll}
+              disabled={loading}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
             </Button>
-            <Button variant="outline" onClick={openCategoryModal}>
-              <Plus className="w-4 h-4 mr-2" /> Manage Categories
+            <Button
+              variant="outline"
+              className="rounded-2xl"
+              onClick={() => setShowCategoryModal(true)}
+            >
+              New Category
+            </Button>
+            <Button className="rounded-2xl gap-2" onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              New Menu Item
             </Button>
           </div>
         }
       />
 
-      <DataTable
-        data={menuItems}
-        columns={columns}
-        loading={loading}
-        actions={actions}
-        emptyMessage="No menu items found. Add your first item above."
-      />
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={menuItems}
+          emptyMessage="No menu items yet. Create your first item."
+        />
+      )}
 
-      {/* Menu Item Create/Edit Modal */}
+      <ModalShell
+        open={showAddonsModal}
+        title={editingAddonsItem ? `${editingAddonsItem.name} Add-ons` : "Add-ons"}
+        description="Attach the groups that should appear for this menu item in POS and online ordering."
+        onClose={closeAddonsModal}
+        className="max-w-2xl"
+        overlayClassName="bg-zinc-950/35 backdrop-blur-[0.5px]"
+      >
+        {editingAddonsItem ? (
+          <MenuItemAddonsSection menuItemId={editingAddonsItem.id} onChange={fetchMenu} />
+        ) : null}
+      </ModalShell>
+
+      {/* ========== CREATE / EDIT MENU ITEM ========== */}
       <ModalShell
         open={showModal}
         title={editingItem ? "Edit Menu Item" : "New Menu Item"}
-        description="Manage details, availability windows, and ingredient consumption."
-        onClose={() => setShowModal(false)}
-        className="max-w-2xl"
+        description="Price, category, ingredients, and add-on groups."
+        onClose={closeModal}
+        className="max-w-lg max-h-[90vh] overflow-y-auto"
       >
-        <form onSubmit={handleMenuSubmit} className="space-y-6">
-          {/* Visual Identity */}
-          <FormSection
-            title="Visual Identity"
-            description="Upload a high-quality image for the menu (recommended 800x800px)"
-          >
-            <div className="rounded-[1.75rem] border border-dashed border-zinc-300 bg-muted/20 p-6 text-center">
-              <div className="mx-auto flex max-w-md flex-col items-center gap-4">
-                <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-3xl bg-white shadow-sm">
-                  {imagePreview ? (
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <ImageIcon className="h-16 w-16 text-zinc-400" />
-                  )}
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="block w-full text-sm text-zinc-500 file:mr-4 file:rounded-full file:border-0 file:bg-zinc-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-700"
-                />
-                <p className="text-xs text-muted-foreground">
-                  PNG, JPG or GIF • Max 5MB
-                </p>
-              </div>
-            </div>
-          </FormSection>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <FormSection title="Basics">
+            <FormField label="Name">
+              <Input
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, name: e.target.value }))
+                }
+                placeholder="Iced Latte"
+                className="rounded-xl"
+              />
+            </FormField>
 
-          {/* Item Details FormSection */}
-          <FormSection title="Item Details">
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                label="Item Name"
-                description="Clear, recognizable name"
-              >
-                <Input
-                  placeholder="Iced Caramel Latte"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  required
-                />
-              </FormField>
+            <FormField label="Description">
+              <Input
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData((p) => ({ ...p, description: e.target.value }))
+                }
+                placeholder="Optional short description"
+                className="rounded-xl"
+              />
+            </FormField>
 
-              {/* ← REPLACE WITH THIS BLOCK */}
-              <FormField
-                label="Category"
-                description="Select from existing categories"
-              >
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Category">
                 <select
-                  value={formData.categoryId}
+                  className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+                  value={formData.categoryId || ""}
                   onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      categoryId: parseInt(e.target.value),
+                    setFormData((p) => ({
+                      ...p,
+                      categoryId: Number(e.target.value),
                     }))
                   }
-                  className="h-10 w-full rounded-2xl border px-3"
-                  required
                 >
-                  <option value={0}>Select Category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
+                  <option value="">Select…</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>
               </FormField>
 
-              <FormField label="Price (₱)" description="Base selling price">
+              <FormField label="Price (₱)">
                 <Input
                   type="number"
+                  min={0}
                   step="0.01"
-                  placeholder="149.00"
                   value={formData.price}
                   onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
+                    setFormData((p) => ({
+                      ...p,
                       price: parseFloat(e.target.value) || 0,
                     }))
                   }
-                  required
-                />
-              </FormField>
-
-              <FormField
-                label="Display Order"
-                description="Position in menu list"
-              >
-                <Input
-                  type="number"
-                  placeholder="1"
-                  value={formData.displayOrder}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      displayOrder: parseInt(e.target.value) || 0,
-                    }))
-                  }
+                  className="rounded-xl"
                 />
               </FormField>
             </div>
 
-            <FormField
-              label="Description"
-              description="Optional short description"
-            >
+            <FormField label="Display order">
               <Input
-                placeholder="Rich espresso with steamed milk and caramel drizzle"
-                value={formData.description}
+                type="number"
+                value={formData.displayOrder}
                 onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    description: e.target.value,
+                  setFormData((p) => ({
+                    ...p,
+                    displayOrder: Number(e.target.value) || 0,
                   }))
                 }
+                className="rounded-xl w-32"
               />
             </FormField>
-          </FormSection>
 
-          {/* Availability */}
-          <FormSection
-            title="Availability"
-            description="Optional time-based availability (24-hour format)"
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField label="Available From">
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Available from">
                 <Input
                   type="time"
                   value={formData.availableFrom}
                   onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
+                    setFormData((p) => ({
+                      ...p,
                       availableFrom: e.target.value,
                     }))
                   }
+                  className="rounded-xl"
                 />
               </FormField>
-              <FormField label="Available Until">
+              <FormField label="Available until">
                 <Input
                   type="time"
                   value={formData.availableUntil}
                   onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
+                    setFormData((p) => ({
+                      ...p,
                       availableUntil: e.target.value,
                     }))
                   }
+                  className="rounded-xl"
                 />
               </FormField>
             </div>
+
+            <FormField label="Image">
+              <div className="flex items-center gap-4">
+                {imagePreview ? (
+                  <img
+                    src={imagePreview}
+                    alt=""
+                    className="h-16 w-16 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                )}
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={onImageChange}
+                  className="rounded-xl"
+                />
+              </div>
+            </FormField>
           </FormSection>
 
-          {/* Inventory Links */}
           <FormSection
-            title="Inventory Ingredients"
-            description="Link ingredients consumed per unit sold"
+            title="Ingredients (inventory)"
+            description="How much stock is used per unit sold."
           >
-            <div className="space-y-4">
+            <div className="space-y-2">
               {formData.inventoryLinks.map((link, index) => (
                 <div
                   key={index}
-                  className="rounded-2xl border p-4 bg-zinc-50 dark:bg-zinc-900"
+                  className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 p-3"
                 >
-                  <div className="grid gap-3 md:grid-cols-[2fr,1fr,auto]">
-                    <FormField label="Ingredient">
-                      <select
-                        value={link.inventoryItemId}
-                        onChange={(e) =>
-                          updateInventoryLink(
-                            index,
-                            "inventoryItemId",
-                            parseInt(e.target.value),
-                          )
-                        }
-                        className="h-10 w-full rounded-2xl border px-3"
-                      >
-                        {ingredientOptions.map((inv) => (
-                          <option key={inv.id} value={inv.id}>
-                            {inv.name} ({inv.currentStock} {inv.unit})
-                          </option>
-                        ))}
-                      </select>
-                    </FormField>
-
-                    <FormField label="Qty per Unit">
-                      <Input
-                        type="number"
-                        step="0.001"
-                        value={link.quantityUsedPerUnit}
-                        onChange={(e) =>
-                          updateInventoryLink(
-                            index,
-                            "quantityUsedPerUnit",
-                            parseFloat(e.target.value) || 0,
-                          )
-                        }
-                      />
-                    </FormField>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => removeInventoryLink(index)}
-                      className="mt-6"
-                    >
-                      Remove
-                    </Button>
-                  </div>
+                  <select
+                    className="min-w-[10rem] flex-1 rounded-xl border border-input bg-background px-3 py-2 text-sm"
+                    value={link.inventoryItemId}
+                    onChange={(e) =>
+                      updateInventoryLink(index, {
+                        inventoryItemId: Number(e.target.value),
+                      })
+                    }
+                  >
+                    {ingredientOptions.map((inv) => (
+                      <option key={inv.id} value={inv.id}>
+                        {inv.name} ({inv.unit})
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="w-24 rounded-xl"
+                    value={link.quantityUsedPerUnit}
+                    onChange={(e) =>
+                      updateInventoryLink(index, {
+                        quantityUsedPerUnit: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500"
+                    onClick={() => removeInventoryLink(index)}
+                  >
+                    Remove
+                  </Button>
                 </div>
               ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                onClick={addInventoryLink}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add ingredient
+              </Button>
             </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-4 w-full"
-              onClick={addInventoryLink}
-            >
-              + Add Ingredient Link
-            </Button>
           </FormSection>
 
-          <div className="flex gap-3 pt-4">
-            <Button type="submit" className="flex-1" disabled={submitting}>
-              {submitting
-                ? "Saving..."
-                : editingItem
-                  ? "Update Item"
-                  : "Create Item"}
+          {/* ========== ADD-ONS ========== */}
+          <FormSection
+            title="Add-ons"
+            description="Select which add-on groups apply to this item. Customers see them in POS and online."
+          >
+            <MenuItemAddonsSection
+              menuItemId={editingItem?.id ?? null}
+              // Create: controlled list → attach after create
+              // Edit: uncontrolled → component calls attach/detach APIs live
+              selectedGroupIds={editingItem ? undefined : selectedAddonGroupIds}
+              onSelectedGroupIdsChange={
+                editingItem ? undefined : setSelectedAddonGroupIds
+              }
+            />
+          </FormSection>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="submit"
+              className="flex-1 rounded-2xl"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : editingItem ? (
+                "Update Item"
+              ) : (
+                "Create Item"
+              )}
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
-              onClick={() => setShowModal(false)}
+              className="flex-1 rounded-2xl"
+              onClick={closeModal}
               disabled={submitting}
             >
               Cancel
@@ -652,73 +755,62 @@ export default function MenuPage() {
         </form>
       </ModalShell>
 
-      {/* Category Creation Modal */}
+      {/* ========== NEW CATEGORY ========== */}
       <ModalShell
         open={showCategoryModal}
-        title="Create New Category"
-        description="Categories help organize your menu items."
+        title="New Category"
+        description="Group menu items (Coffee, Pastries, etc.)."
         onClose={() => setShowCategoryModal(false)}
         className="max-w-md"
       >
-        <form onSubmit={handleCreateCategory} className="space-y-6">
-          <FormSection title="Category Details">
-            <FormField
-              label="Category Name"
-              description="e.g. Coffee, Pastries"
-            >
-              <Input
-                placeholder="Coffee"
-                value={categoryForm.name}
-                onChange={(e) =>
-                  setCategoryForm({ ...categoryForm, name: e.target.value })
-                }
-                required
-              />
-            </FormField>
-
-            <FormField label="Description" description="Optional">
-              <Input
-                placeholder="Hot and cold coffee beverages"
-                value={categoryForm.description}
-                onChange={(e) =>
-                  setCategoryForm({
-                    ...categoryForm,
-                    description: e.target.value,
-                  })
-                }
-              />
-            </FormField>
-
-            <FormField
-              label="Display Order"
-              description="Position in menu (optional)"
-            >
-              <Input
-                type="number"
-                placeholder="1"
-                value={categoryForm.displayOrder}
-                onChange={(e) =>
-                  setCategoryForm({
-                    ...categoryForm,
-                    displayOrder: parseInt(e.target.value) || 0,
-                  })
-                }
-              />
-            </FormField>
-          </FormSection>
-
-          <div className="flex gap-3 pt-4">
+        <form onSubmit={handleCreateCategory} className="space-y-5">
+          <FormField label="Name">
+            <Input
+              value={categoryForm.name}
+              onChange={(e) =>
+                setCategoryForm((p) => ({ ...p, name: e.target.value }))
+              }
+              placeholder="Coffee"
+              className="rounded-xl"
+            />
+          </FormField>
+          <FormField label="Description">
+            <Input
+              value={categoryForm.description}
+              onChange={(e) =>
+                setCategoryForm((p) => ({
+                  ...p,
+                  description: e.target.value,
+                }))
+              }
+              className="rounded-xl"
+            />
+          </FormField>
+          <FormField label="Display order">
+            <Input
+              type="number"
+              value={categoryForm.displayOrder}
+              onChange={(e) =>
+                setCategoryForm((p) => ({
+                  ...p,
+                  displayOrder: Number(e.target.value) || 0,
+                }))
+              }
+              className="rounded-xl w-32"
+            />
+          </FormField>
+          <div className="flex gap-3 pt-2">
             <Button
               type="submit"
-              className="flex-1"
+              className="flex-1 rounded-2xl"
               disabled={categorySubmitting}
             >
-              {categorySubmitting ? "Creating..." : "Create Category"}
+              {categorySubmitting ? "Creating…" : "Create Category"}
             </Button>
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
+              className="flex-1 rounded-2xl"
               onClick={() => setShowCategoryModal(false)}
               disabled={categorySubmitting}
             >

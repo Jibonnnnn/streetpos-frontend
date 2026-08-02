@@ -12,6 +12,7 @@ import { LoginForm } from "@/components/login-form";
 import ReportsPage from "@/pages/Reports";
 import CategoriesPage from "@/pages/Categories";
 import PromotionsPage from "@/pages/Promotions";
+import AddonsPage from "@/pages/Addons";
 
 export function AppRouter() {
   return (
@@ -91,6 +92,14 @@ export function AppRouter() {
             element={
               <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
                 <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="addons"
+            element={
+              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
+                <AddonsPage />
               </ProtectedRoute>
             }
           />

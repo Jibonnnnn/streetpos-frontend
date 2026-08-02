@@ -48,6 +48,7 @@ export interface MenuItemInventoryLinkRequest {
 export interface CartItem extends MenuItem {
   quantity: number;
   selectedModifierOptionIds: number[];
+  selectedOptionLabels?: string[];
   note?: string;
   itemTotal: number;
 }

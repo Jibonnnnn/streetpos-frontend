@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from './Skeleton';
 
 interface Column<T> {
   header: string;
   accessor: keyof T | ((item: T) => React.ReactNode);
+  render?: (item: T) => React.ReactNode;
   className?: string;
 }
 
@@ -35,6 +36,25 @@ export function DataTable<T>({
     onSearch?.(term);
   };
 
+  const filteredData = useMemo(() => {
+    if (onSearch) {
+      return data;
+    }
+
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) {
+      return data;
+    }
+
+    return data.filter((item) => {
+      try {
+        return JSON.stringify(item).toLowerCase().includes(term);
+      } catch {
+        return false;
+      }
+    });
+  }, [data, onSearch, searchTerm]);
+
   if (loading) {
     return <Skeleton className="h-96 w-full" />;
   }
@@ -64,18 +84,20 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 ? (
+              {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length + (actions ? 1 : 0)} className="p-8 text-center sm:p-12">
                     <p className="text-zinc-500">{emptyMessage}</p>
                   </td>
                 </tr>
               ) : (
-                data.map((item, rowIndex) => (
+                filteredData.map((item, rowIndex) => (
                   <tr key={rowIndex} className="border-b hover:bg-zinc-50 dark:hover:bg-zinc-800">
                     {columns.map((col, colIndex) => (
                       <td key={colIndex} className="p-4 align-top">
-                        {typeof col.accessor === 'function' 
+                        {col.render
+                          ? col.render(item)
+                          : typeof col.accessor === 'function' 
                           ? col.accessor(item) 
                           : String(item[col.accessor])}
                       </td>

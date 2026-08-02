@@ -5,12 +5,14 @@ import { Input } from "@/components/ui/input";
 import { BadgePill } from "@/components/common/BadgePill";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { CashierSkeleton } from "@/components/skeletons/CashierSkeleton";
+import { AddonPicker } from "@/components/addons/AddonPicker";
 import { useCart } from "@/contexts/CartContext";
 import { useKioskMode } from "@/hooks/useKioskMode";
 import { useMenuItems } from "@/hooks/queries/useMenu";
 import { useMyOrders } from "@/hooks/queries/useOrders";
 import { ordersService } from "@/services/orders.service";
 import { promotionService } from "@/services/promotion.service";
+import { addonService } from "@/services/addon.service";
 import { getFullImageUrl } from "@/lib/imageUtils";
 import { toast } from "sonner";
 import {
@@ -30,11 +32,27 @@ import type {
   OrderResponse,
   PaymentMethod,
 } from "@/types";
+import type { ModifierGroup } from "@/types/addons";
+
+function optionLabelsFromIds(groups: ModifierGroup[], ids: number[]): string[] {
+  const labels: string[] = [];
+
+  for (const group of groups) {
+    for (const option of group.options) {
+      if (ids.includes(option.id)) {
+        labels.push(
+          option.priceAdjustment > 0
+            ? `${option.name} (+₱${option.priceAdjustment.toFixed(2)})`
+            : option.name,
+        );
+      }
+    }
+  }
+
+  return labels;
+}
 
 export default function CashierPage() {
-  // Keep the POS fullscreen and the screen awake while a cashier is working.
-  // Automatically cleans up (exits fullscreen, releases wake lock) if the
-  // cashier navigates away to another page.
   useKioskMode();
 
   const { cart, addToCart, removeFromCart, updateQuantity, clearCart, total } =
@@ -51,8 +69,10 @@ export default function CashierPage() {
   const [showModifiersModal, setShowModifiersModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [selectedOptionIds, setSelectedOptionIds] = useState<number[]>([]);
   const [customNote, setCustomNote] = useState("");
+  const [addonGroups, setAddonGroups] = useState<ModifierGroup[]>([]);
+  const [addonsLoading, setAddonsLoading] = useState(false);
+
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod>("Cash");
   const [amountTendered, setAmountTendered] = useState("");
@@ -65,37 +85,28 @@ export default function CashierPage() {
   );
   const [previewDiscount, setPreviewDiscount] = useState(0);
 
-  // Tabs: pos | online | tabs
+  // Online / open tabs
   const [posTab, setPosTab] = useState<"pos" | "online" | "tabs">("pos");
-
-  // Online orders
+  const [onlineOrders, setOnlineOrders] = useState<any[]>([]);
+  const [onlineLoading, setOnlineLoading] = useState(false);
   const [expandedOnlineOrderId, setExpandedOnlineOrderId] = useState<
     number | null
   >(null);
-  const [onlineOrders, setOnlineOrders] = useState<any[]>([]);
-  const [onlineLoading, setOnlineLoading] = useState(false);
   const [checkoutOnlineOrderId, setCheckoutOnlineOrderId] = useState<
     number | null
   >(null);
 
-  // Open Tabs (Pay Later)
   const [openTabs, setOpenTabs] = useState<OrderResponse[]>([]);
   const [openTabsLoading, setOpenTabsLoading] = useState(false);
   const [settleOrderId, setSettleOrderId] = useState<number | null>(null);
+  const [payLaterCustomerName, setPayLaterCustomerName] = useState("");
 
-  // ---------- effects ----------
-  useEffect(() => {
-    promotionService
-      .getActive()
-      .then((res) => setActivePromos(res.data || []))
-      .catch(() => setActivePromos([]));
-  }, []);
-
+  // ---------- data loaders ----------
   const fetchOnlineOrders = async () => {
     try {
       setOnlineLoading(true);
       const res = await ordersService.getOnlineOrders();
-      setOnlineOrders(res.data || []);
+      setOnlineOrders(res.data ?? []);
     } catch {
       toast.error("Failed to load online orders");
     } finally {
@@ -107,7 +118,7 @@ export default function CashierPage() {
     try {
       setOpenTabsLoading(true);
       const res = await ordersService.getOpenTabs();
-      setOpenTabs(res.data || []);
+      setOpenTabs(res.data ?? []);
     } catch {
       toast.error("Failed to load open tabs");
     } finally {
@@ -116,60 +127,43 @@ export default function CashierPage() {
   };
 
   useEffect(() => {
+    promotionService
+      .getActive()
+      .then((res) => setActivePromos(res.data ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (posTab === "online") fetchOnlineOrders();
     if (posTab === "tabs") fetchOpenTabs();
   }, [posTab]);
 
-  // ---------- derived values ----------
+  // ---------- menu filter ----------
   const filteredMenu = useMemo(() => {
-    const term = searchTerm.toLowerCase().trim();
-    return (menuItems as MenuItem[]).filter((item) => {
-      if (!item.isActive) return false;
-      if (!term) return true;
-      return (
-        item.name.toLowerCase().includes(term) ||
-        item.categoryName?.toLowerCase().includes(term)
-      );
-    });
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return menuItems.filter((m: MenuItem) => m.isActive);
+    return menuItems.filter(
+      (m: MenuItem) =>
+        m.isActive &&
+        (m.name.toLowerCase().includes(q) ||
+          m.categoryName?.toLowerCase().includes(q)),
+    );
   }, [menuItems, searchTerm]);
 
-  const currentModifiers = selectedItem?.modifierGroups || [];
-  const [payLaterCustomerName, setPayLaterCustomerName] = useState("");
-
-  const calculatePrice = (basePrice: number) => {
-    const modifierTotal = currentModifiers
-      .flatMap((g) => g.options)
-      .filter((o) => selectedOptionIds.includes(o.id))
-      .reduce((sum, o) => sum + o.priceAdjustment, 0);
-    return basePrice + modifierTotal;
-  };
-
+  // ---------- promotion preview ----------
   const calculatePreviewDiscount = (promo: Promotion | null) => {
     if (!promo || cart.length === 0) return 0;
-
-    const eligible = cart.filter(
-      (item) =>
-        promo.menuItemIds.length === 0 || promo.menuItemIds.includes(item.id),
-    );
-    if (eligible.length === 0) return 0;
-    if (promo.minOrderAmount && total < promo.minOrderAmount) return 0;
-
-    const eligibleTotal = eligible.reduce((sum, i) => sum + i.itemTotal, 0);
-
     switch (promo.type) {
       case "Percentage":
-      case "HappyHour":
-        return Math.round(eligibleTotal * (promo.value / 100) * 100) / 100;
+        return (total * Number(promo.value)) / 100;
       case "FixedAmount":
-        return Math.min(promo.value, eligibleTotal);
+        return Math.min(Number(promo.value), total);
       case "BuyOneGetOne": {
-        const prices = eligible
-          .flatMap((i) => Array(i.quantity).fill(i.itemTotal / i.quantity))
+        const prices = cart
+          .flatMap((c) => Array(c.quantity).fill(c.itemTotal / c.quantity))
           .sort((a: number, b: number) => a - b);
         const freeCount = Math.floor(prices.length / 2);
-        return prices
-          .slice(0, freeCount)
-          .reduce((s: number, p: number) => s + p, 0);
+        return prices.slice(0, freeCount).reduce((s: number, p: number) => s + p, 0);
       }
       default:
         return 0;
@@ -222,36 +216,60 @@ export default function CashierPage() {
     (o) => o.status === "Pending",
   ).length;
 
-  // ---------- helpers ----------
-  const openModifiersModal = (item: MenuItem) => {
+  // ---------- add-ons modal ----------
+  const openModifiersModal = async (item: MenuItem) => {
     setSelectedItem(item);
-    setSelectedOptionIds([]);
     setCustomNote("");
+    setAddonGroups([]);
     setShowModifiersModal(true);
+
+    const embedded = (item as any).modifierGroups as ModifierGroup[] | undefined;
+    if (embedded && embedded.length > 0) {
+      setAddonGroups(embedded);
+      return;
+    }
+
+    try {
+      setAddonsLoading(true);
+      const res = await addonService.getByMenuItem(item.id);
+      setAddonGroups(res.data ?? []);
+    } catch {
+      setAddonGroups([]);
+      toast.error("Failed to load add-ons");
+    } finally {
+      setAddonsLoading(false);
+    }
   };
 
-  const toggleOption = (optionId: number) => {
-    setSelectedOptionIds((prev) =>
-      prev.includes(optionId)
-        ? prev.filter((id) => id !== optionId)
-        : [...prev, optionId],
-    );
+  const closeModifiersModal = () => {
+    setShowModifiersModal(false);
+    setSelectedItem(null);
+    setCustomNote("");
+    setAddonGroups([]);
   };
 
-  const handleAddToCart = () => {
+  const handleAddonConfirm = (
+    selectedOptionIds: number[],
+    unitPrice: number,
+  ) => {
     if (!selectedItem) return;
 
-    const unitPrice = calculatePrice(selectedItem.price);
+    const selectedOptionLabels = optionLabelsFromIds(
+      addonGroups,
+      selectedOptionIds,
+    );
+
     const cartItem: CartItem = {
       ...selectedItem,
       quantity: 1,
       selectedModifierOptionIds: selectedOptionIds,
-      note: customNote || undefined,
+      selectedOptionLabels,
+      note: customNote.trim() || undefined,
       itemTotal: unitPrice,
     };
 
     addToCart(cartItem);
-    setShowModifiersModal(false);
+    closeModifiersModal();
     toast.success(`${selectedItem.name} added to order`);
   };
 
@@ -282,7 +300,7 @@ export default function CashierPage() {
     setPayLaterCustomerName("");
   };
 
-  // ---------- main checkout / settle handler ----------
+  // ---------- checkout ----------
   const handleCheckout = async () => {
     if (selectedPaymentMethod === "Cash" && !amountTendered) {
       toast.error("Please enter amount tendered");
@@ -300,7 +318,7 @@ export default function CashierPage() {
     try {
       setIsCheckingOut(true);
 
-      // 1. Settle an existing Pay-Later tab
+      // 1. Settle open tab
       if (settleOrderId) {
         await ordersService.settlePayLater(settleOrderId, {
           paymentMethod: selectedPaymentMethod,
@@ -346,7 +364,7 @@ export default function CashierPage() {
         return;
       }
 
-      // 3. Normal POS cart → create + checkout
+      // 3. Normal POS cart
       if (cart.length === 0) {
         toast.error("Cart is empty");
         return;
@@ -384,7 +402,7 @@ export default function CashierPage() {
         customerName:
           selectedPaymentMethod === "PayLater"
             ? payLaterCustomerName.trim()
-            : undefined, // ← must be here
+            : undefined,
       });
 
       if (selectedPaymentMethod === "PayLater") {
@@ -480,7 +498,7 @@ export default function CashierPage() {
         </Button>
       </div>
 
-      {/* ========== OPEN TABS TAB ========== */}
+      {/* ========== OPEN TABS ========== */}
       {posTab === "tabs" ? (
         <Card className="border-border/60 bg-white/80 shadow-sm">
           <CardContent className="p-6">
@@ -516,10 +534,7 @@ export default function CashierPage() {
             ) : (
               <div className="space-y-4">
                 {openTabs.map((order) => {
-                  // Support both shapes the API may return
                   const items = order.items || (order as any).orderItems || [];
-
-                  // Prefer customer name → cashier name → Walk-in
                   const displayName =
                     order.customerName?.trim() ||
                     order.cashierName?.trim() ||
@@ -538,16 +553,12 @@ export default function CashierPage() {
                             </p>
                             <BadgePill tone="warning">Pay Later</BadgePill>
                           </div>
-
-                          {/* Customer name instead of Cashier */}
                           <p className="mt-2 text-sm font-medium">
                             Customer:{" "}
                             <span className="text-amber-700 dark:text-amber-400">
                               {displayName}
                             </span>
                           </p>
-
-                          {/* Date only – table number removed */}
                           <p className="mt-1 text-xs text-muted-foreground">
                             {new Date(
                               order.createdAt?.endsWith?.("Z")
@@ -560,31 +571,27 @@ export default function CashierPage() {
                               minute: "2-digit",
                             })}
                           </p>
-
-                          {/* Items – safer name resolution */}
                           <ul className="mt-3 space-y-1">
                             {items.length === 0 ? (
                               <li className="text-sm text-muted-foreground">
                                 No items
                               </li>
                             ) : (
-                              items
-                                .slice(0, 5)
-                                .map((item: any, idx: number) => {
-                                  const name =
-                                    item.menuItemName ||
-                                    item.menuItem?.name ||
-                                    item.name ||
-                                    "Item";
-                                  return (
-                                    <li
-                                      key={idx}
-                                      className="text-sm text-muted-foreground"
-                                    >
-                                      {item.quantity}× {name}
-                                    </li>
-                                  );
-                                })
+                              items.slice(0, 5).map((item: any, idx: number) => {
+                                const name =
+                                  item.menuItemName ||
+                                  item.menuItem?.name ||
+                                  item.name ||
+                                  "Item";
+                                return (
+                                  <li
+                                    key={idx}
+                                    className="text-sm text-muted-foreground"
+                                  >
+                                    {item.quantity}× {name}
+                                  </li>
+                                );
+                              })
                             )}
                             {items.length > 5 && (
                               <li className="text-xs text-muted-foreground">
@@ -593,7 +600,6 @@ export default function CashierPage() {
                             )}
                           </ul>
                         </div>
-
                         <div className="flex flex-col items-end gap-3 sm:shrink-0">
                           <p className="text-xl font-bold">
                             ₱{(order.total || 0).toFixed(2)}
@@ -615,7 +621,7 @@ export default function CashierPage() {
           </CardContent>
         </Card>
       ) : posTab === "online" ? (
-        /* ========== ONLINE TAB ========== */
+        /* ========== ONLINE ========== */
         <Card className="border-border/60 bg-white/80 shadow-sm">
           <CardContent className="p-6">
             <div className="mb-6 flex items-center justify-between gap-4">
@@ -685,14 +691,12 @@ export default function CashierPage() {
                               {isExpanded ? "Hide details ▲" : "View details ▼"}
                             </span>
                           </div>
-
                           <p className="mt-2 text-sm font-medium">
                             Customer:{" "}
                             <span className="text-amber-700 dark:text-amber-400">
                               {order.customerName || "—"}
                             </span>
                           </p>
-
                           <p className="mt-1 text-xs text-muted-foreground">
                             {new Date(
                               order.createdAt?.endsWith?.("Z")
@@ -706,7 +710,6 @@ export default function CashierPage() {
                             })}
                           </p>
                         </div>
-
                         <div className="flex flex-col items-end gap-3 sm:shrink-0">
                           <p className="text-xl font-bold">
                             ₱{(order.total || 0).toFixed(2)}
@@ -719,7 +722,6 @@ export default function CashierPage() {
                           <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             Order items
                           </p>
-
                           {items.length === 0 ? (
                             <p className="text-sm text-muted-foreground">
                               No item details available.
@@ -767,16 +769,12 @@ export default function CashierPage() {
                               ))}
                             </ul>
                           )}
-
                           {order.customerNotes && (
                             <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                              <span className="font-medium">
-                                Customer note:
-                              </span>{" "}
+                              <span className="font-medium">Customer note:</span>{" "}
                               {order.customerNotes}
                             </p>
                           )}
-
                           {order.status === "Pending" && (
                             <div className="mt-4 flex justify-end">
                               <Button
@@ -813,9 +811,8 @@ export default function CashierPage() {
           </CardContent>
         </Card>
       ) : (
-        /* ========== POS TAB ========== */
+        /* ========== POS ========== */
         <>
-          {/* Quick Stats */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Card className="border-border/40 bg-gradient-to-br from-white to-zinc-50/80 shadow-sm dark:from-zinc-950 dark:to-zinc-900/50">
               <CardContent className="p-5">
@@ -860,7 +857,7 @@ export default function CashierPage() {
                         Menu Items
                       </h2>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Tap a card to add modifiers and build the order.
+                        Tap a card to choose add-ons and build the order.
                       </p>
                     </div>
                     <BadgePill tone="info" className="shrink-0">
@@ -900,13 +897,10 @@ export default function CashierPage() {
                                 ☕
                               </div>
                             )}
-
                             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-60" />
-
                             <div className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-sm font-semibold text-amber-700 shadow-sm backdrop-blur-sm dark:bg-zinc-950/90 dark:text-amber-400">
                               ₱{item.price.toFixed(2)}
                             </div>
-
                             {hasLowStock && (
                               <div className="absolute left-3 top-3">
                                 <BadgePill
@@ -919,7 +913,6 @@ export default function CashierPage() {
                               </div>
                             )}
                           </div>
-
                           <div className="flex flex-1 flex-col p-4">
                             <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                               {item.categoryName}
@@ -932,7 +925,6 @@ export default function CashierPage() {
                                 {item.description}
                               </p>
                             )}
-
                             <div className="mt-auto pt-3">
                               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:text-amber-400">
                                 <Plus className="h-3.5 w-3.5" />
@@ -956,7 +948,6 @@ export default function CashierPage() {
 
             {/* Sidebar */}
             <div className="space-y-6 lg:col-span-5">
-              {/* Current Order */}
               <Card className="border-border/60 bg-white/80 shadow-sm">
                 <CardContent className="p-6">
                   <div className="mb-6 flex items-center justify-between gap-4">
@@ -988,11 +979,11 @@ export default function CashierPage() {
                             <p className="font-medium leading-tight">
                               {item.name}
                             </p>
-                            {item.note && (
+                            {item.selectedOptionLabels?.length ? (
                               <p className="mt-1 text-xs text-muted-foreground">
-                                Note: {item.note}
+                                {item.selectedOptionLabels.join(", ")}
                               </p>
-                            )}
+                            ) : null}
                             <p className="mt-1 text-sm font-semibold text-amber-600">
                               ₱{item.itemTotal.toFixed(2)}
                             </p>
@@ -1034,7 +1025,6 @@ export default function CashierPage() {
                     )}
                   </div>
 
-                  {/* Apply Promotion */}
                   {activePromos.length > 0 &&
                     cart.length > 0 &&
                     selectedPaymentMethod !== "PayLater" && (
@@ -1092,7 +1082,6 @@ export default function CashierPage() {
                       </div>
                     )}
 
-                  {/* Totals */}
                   <div className="mt-6 border-t border-border/60 pt-5">
                     {previewDiscount > 0 && (
                       <div className="mb-3 space-y-1 text-sm">
@@ -1126,7 +1115,6 @@ export default function CashierPage() {
                 </CardContent>
               </Card>
 
-              {/* Recent Orders */}
               <Card className="border-border/60 bg-white/80 shadow-sm">
                 <CardContent className="p-6">
                   <div className="mb-6 flex items-center justify-between gap-4">
@@ -1216,85 +1204,48 @@ export default function CashierPage() {
         </>
       )}
 
-      {/* Modifiers Modal */}
+      {/* ========== ADD-ONS MODAL (AddonPicker) ========== */}
       {showModifiersModal && selectedItem && (
         <ModalShell
           open={showModifiersModal}
           title={selectedItem.name}
-          description={`Base price: ₱${selectedItem.price.toFixed(2)}`}
-          onClose={() => setShowModifiersModal(false)}
+          description={`Base price: ₱${selectedItem.price.toFixed(2)} · choose the add-ons for this item`}
+          onClose={closeModifiersModal}
           className="max-w-md"
         >
-          <div className="space-y-6">
-            {currentModifiers.length > 0 ? (
-              currentModifiers.map((group) => (
-                <div key={group.id}>
-                  <h3 className="mb-3 font-medium">
-                    {group.name}{" "}
-                    {group.isRequired && (
-                      <span className="text-red-500">(Required)</span>
-                    )}
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {group.options.map((option) => (
-                      <label
-                        key={option.id}
-                        className="flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition-colors hover:bg-amber-50 dark:hover:bg-zinc-800"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedOptionIds.includes(option.id)}
-                          onChange={() => toggleOption(option.id)}
-                        />
-                        <div>
-                          <div className="text-sm font-medium">
-                            {option.name}
-                          </div>
-                          {option.priceAdjustment > 0 && (
-                            <div className="text-xs text-emerald-600">
-                              +₱{option.priceAdjustment.toFixed(2)}
-                            </div>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))
+          <div className="space-y-5">
+            {addonsLoading ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading add-ons…
+              </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                No modifiers available for this item.
-              </p>
+              <>
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Notes
+                  </label>
+                  <Input
+                    placeholder="No ice, extra sugar..."
+                    value={customNote}
+                    onChange={(e) => setCustomNote(e.target.value)}
+                  />
+                </div>
+
+                <AddonPicker
+                  groups={addonGroups}
+                  basePrice={selectedItem.price}
+                  onConfirm={handleAddonConfirm}
+                  onCancel={closeModifiersModal}
+                  confirmLabel="Add to order"
+                />
+              </>
             )}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">
-                Special Requests
-              </label>
-              <Input
-                placeholder="No ice, extra sugar..."
-                value={customNote}
-                onChange={(e) => setCustomNote(e.target.value)}
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button onClick={handleAddToCart} className="flex-1 py-6 text-lg">
-                Add — ₱{calculatePrice(selectedItem.price).toFixed(2)}
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1 py-6"
-                onClick={() => setShowModifiersModal(false)}
-              >
-                Cancel
-              </Button>
-            </div>
           </div>
         </ModalShell>
       )}
 
-      {/* Checkout / Settle Modal */}
+      {/* ========== CHECKOUT / SETTLE MODAL ========== */}
       {showCheckoutModal && (
         <ModalShell
           open={showCheckoutModal}
@@ -1316,7 +1267,6 @@ export default function CashierPage() {
           className="max-w-md"
         >
           <div className="space-y-6">
-            {/* Big total */}
             <div className="text-center">
               <div className="text-5xl font-bold tracking-tight">
                 ₱{finalTotal.toFixed(2)}
@@ -1330,8 +1280,6 @@ export default function CashierPage() {
                 )}
             </div>
 
-            {/* ========== STEP D: Customer Name field ========== */}
-            {/* Only shows when creating a NEW Pay Later order */}
             {!settleOrderId &&
               !checkoutOnlineOrderId &&
               selectedPaymentMethod === "PayLater" && (
@@ -1347,9 +1295,7 @@ export default function CashierPage() {
                   />
                 </div>
               )}
-            {/* ========== end of Step D ========== */}
 
-            {/* Payment method buttons */}
             <div className="space-y-3">
               {(
                 ["Cash", "GCash", "Maya", "Card", "PayLater"] as PaymentMethod[]
@@ -1368,7 +1314,6 @@ export default function CashierPage() {
               ))}
             </div>
 
-            {/* Amount tendered – only for Cash */}
             {selectedPaymentMethod === "Cash" && (
               <div>
                 <label className="mb-2 block text-sm font-medium">
@@ -1389,7 +1334,6 @@ export default function CashierPage() {
               </div>
             )}
 
-            {/* Confirm / Cancel buttons */}
             <div className="flex gap-3 pt-2">
               <Button
                 onClick={handleCheckout}

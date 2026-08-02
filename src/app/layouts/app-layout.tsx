@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Outlet, Link, useLocation } from "react-router-dom";
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { Percent } from "lucide-react";
+import { Layers, Percent } from "lucide-react";
 import {
   LayoutDashboard,
   Coffee,
@@ -41,6 +41,13 @@ const navItems: NavItem[] = [
     label: "Promotions",
     href: "/promotions",
     icon: Percent,          // or Percent
+    roles: ["Admin", "Manager"],
+    parent: "Menu Management",
+  },
+  { 
+    label: "Add-ons", 
+    href: "/addons", 
+    icon: Layers, 
     roles: ["Admin", "Manager"],
     parent: "Menu Management",
   },
@@ -196,6 +203,7 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
 export default function AppLayout() {
   const { logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -212,6 +220,11 @@ export default function AppLayout() {
   );
 
   const accentClass = roleAccent[user.role] ?? "from-zinc-900 to-zinc-700";
+
+  const handleSignOut = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   useEffect(() => {
     setIsMobileNavOpen(false);
@@ -314,7 +327,7 @@ export default function AppLayout() {
               variant="outline"
               size="icon"
               className="h-10 w-10 rounded-2xl border-zinc-200/80 bg-white/70 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60"
-              onClick={logout}
+              onClick={handleSignOut}
               aria-label="Sign out"
               title="Sign out"
             >
@@ -324,7 +337,7 @@ export default function AppLayout() {
             <Button
               variant="outline"
               className="w-full justify-start gap-2 rounded-2xl border-zinc-200/80 bg-white/70 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60"
-              onClick={logout}
+              onClick={handleSignOut}
             >
               <LogOut className="h-4 w-4" />
               <span>Sign Out</span>
@@ -426,7 +439,7 @@ export default function AppLayout() {
               <Button
                 variant="outline"
                 className="w-full justify-start gap-2 rounded-2xl border-zinc-200/80 bg-white/70 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/60"
-                onClick={logout}
+                onClick={handleSignOut}
               >
                 <LogOut className="h-4 w-4" />
                 Sign Out

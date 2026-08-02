@@ -10,6 +10,7 @@ type ModalShellProps = {
   children: React.ReactNode;
   onClose: () => void;
   className?: string;
+  overlayClassName?: string;
 };
 
 export function ModalShell({
@@ -19,6 +20,7 @@ export function ModalShell({
   children,
   onClose,
   className,
+  overlayClassName,
 }: ModalShellProps) {
   return (
     <Dialog.Root
@@ -30,9 +32,10 @@ export function ModalShell({
       <Dialog.Portal>
         <Dialog.Overlay
           className={cn(
-            "fixed inset-0 z-50 bg-zinc-950/60 backdrop-blur-sm",
+            "fixed inset-0 z-50 bg-zinc-950/45 backdrop-blur-[1px]",
             "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-200",
             "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-150",
+            overlayClassName,
           )}
         />
         <Dialog.Content
