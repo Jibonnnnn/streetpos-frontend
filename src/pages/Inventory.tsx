@@ -16,6 +16,8 @@ import {
   Trash2,
 } from "lucide-react";
 import type { InventoryItemResponse } from "@/types";
+import { Pagination } from "@/components/common/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 
 const emptyCreate = {
   name: "",
@@ -78,6 +80,18 @@ export default function InventoryPage() {
         i.name.toLowerCase().includes(q) || i.unit?.toLowerCase().includes(q),
     );
   }, [items, search]);
+
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    total,
+    paginated,
+    from,
+    to,
+  } = usePagination(filtered, 10);
 
   const getItemValue = (item: InventoryItemResponse) => {
     const stock = Number(item.currentStock ?? 0);
@@ -326,6 +340,7 @@ export default function InventoryPage() {
               <p>No inventory items found.</p>
             </div>
           ) : (
+            <>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-sm">
                 <thead>
@@ -340,7 +355,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((item) => (
+                  {paginated.map((item) => (
                     <tr
                       key={item.id}
                       className="border-b border-border/40 last:border-0"
@@ -404,6 +419,17 @@ export default function InventoryPage() {
                 </tbody>
               </table>
             </div>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                from={from}
+                to={to}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+              />
+            </>
           )}
         </CardContent>
       </Card>

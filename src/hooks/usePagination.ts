@@ -12,6 +12,9 @@ export type UsePaginationResult<T> = {
   to: number;
 };
 
+/**
+ * Client-side pagination. Resets to page 1 when the source list or page size changes.
+ */
 export function usePagination<T>(
   items: T[],
   initialPageSize = 10,
@@ -22,10 +25,12 @@ export function usePagination<T>(
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
 
+  // Reset to first page when the list shrinks/filters or page size changes
   useEffect(() => {
     setPage(1);
   }, [total, pageSize]);
 
+  // Clamp if current page is past the end (e.g. after deletes)
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);

@@ -44,9 +44,23 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       const res = await usersService.getUsers();
-      setUsers(res.data);
+      const list = (res.data ?? []) as any[];
+      // Normalize id (API may return Id / userId)
+      setUsers(
+        list.map((u) => ({
+          ...u,
+          id: Number(u.id ?? u.Id ?? u.userId ?? 0),
+          fullName: u.fullName ?? u.FullName ?? "",
+          email: u.email ?? u.Email ?? "",
+          role: u.role ?? u.Role ?? "Cashier",
+          isActive: u.isActive ?? u.IsActive ?? true,
+          employeeId: u.employeeId ?? u.EmployeeId,
+          phoneNumber: u.phoneNumber ?? u.PhoneNumber,
+        })),
+      );
     } catch (err) {
       console.error(err);
+      toast.error("Failed to load staff");
     } finally {
       setLoading(false);
     }
@@ -116,11 +130,16 @@ export default function UsersPage() {
         });
         toast.success('New staff account created successfully!');
       } else {
-        await usersService.updateUser(editingUser.id, {
-          fullName: formData.fullName,
-          phoneNumber: formData.phoneNumber || null,
+        const userId = Number(editingUser.id);
+        if (!userId) {
+          toast.error("Cannot update staff: missing user id. Refresh the list and try again.");
+          return;
+        }
+        await usersService.updateUser(userId, {
+          fullName: formData.fullName.trim(),
+          phoneNumber: formData.phoneNumber?.trim() || null,
           role: formData.role,
-          isActive: true
+          isActive: editingUser.isActive,
         });
         toast.success('Staff information updated successfully!');
       }
@@ -202,6 +221,8 @@ export default function UsersPage() {
         loading={loading}
         actions={actions}
         emptyMessage="No staff accounts found."
+        getRowKey={(u) => u.id}
+        pageSize={10}
       />
 
       <ModalShell

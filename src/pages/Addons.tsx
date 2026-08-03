@@ -7,9 +7,9 @@ import { AddonGroupFormFields } from "@/components/addons/AddonGroupForm";
 import { addonService } from "@/services/addon.service";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, RefreshCw, Layers } from "lucide-react";
+import type { ModifierGroup, AddonGroupForm } from "@/types/addons";
 import { Pagination } from "@/components/common/Pagination";
 import { usePagination } from "@/hooks/usePagination";
-import type { ModifierGroup, AddonGroupForm } from "@/types/addons";
 
 function toForm(g: ModifierGroup): AddonGroupForm {
   return {
@@ -100,6 +100,7 @@ export default function AddonsPage() {
     }
   };
 
+
   const {
     page,
     setPage,
@@ -153,6 +154,7 @@ export default function AddonsPage() {
           </Button>
         </div>
       ) : (
+        <>
         <div className="grid gap-4 sm:grid-cols-2">
           {paginated.map((g) => (
             <Card
@@ -213,19 +215,20 @@ export default function AddonsPage() {
                   ))}
                 </ul>
               </CardContent>
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                total={total}
-                from={from}
-                to={to}
-                onPageChange={setPage}
-                pageSize={pageSize}
-                onPageSizeChange={setPageSize}
-              />
             </Card>
           ))}
         </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            from={from}
+            to={to}
+            onPageChange={setPage}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       )}
 
       <ModalShell

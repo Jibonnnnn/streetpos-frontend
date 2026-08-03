@@ -19,7 +19,9 @@ interface DataTableProps<T> {
   onSearch?: (term: string) => void;
   actions?: (item: T) => React.ReactNode;
   emptyMessage?: string;
+  /** Items per page. Default 10. Set to 0 to disable pagination. */
   pageSize?: number;
+  /** Show page-size dropdown. Default true when pagination is on. */
   showPageSize?: boolean;
   getRowKey?: (item: T, index: number) => string | number;
 }
@@ -45,9 +47,12 @@ export function DataTable<T>({
   };
 
   const filteredData = useMemo(() => {
+    // Parent owns filtering when onSearch is provided
     if (onSearch) return data;
+
     const term = searchTerm.trim().toLowerCase();
     if (!term) return data;
+
     return data.filter((item) => {
       try {
         return JSON.stringify(item).toLowerCase().includes(term);
@@ -68,10 +73,7 @@ export function DataTable<T>({
     paginated,
     from,
     to,
-  } = usePagination(
-    filteredData,
-    paginationEnabled ? initialPageSize : filteredData.length || 1,
-  );
+  } = usePagination(filteredData, paginationEnabled ? initialPageSize : filteredData.length || 1);
 
   const rows = paginationEnabled ? paginated : filteredData;
 
