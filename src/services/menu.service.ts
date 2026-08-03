@@ -21,6 +21,7 @@ export const menuService = {
     });
   },
 
-  deleteMenuItem: (id: number) => api.delete(`/menu/${id}`), // Disable
+  disableMenuItem: (id: number) => api.patch(`/menu/${id}/disable`),
+  deleteMenuItem: (id: number) => api.delete(`/menu/${id}`),
   activateMenuItem: (id: number) => api.patch(`/menu/${id}/activate`), // Enable
 };

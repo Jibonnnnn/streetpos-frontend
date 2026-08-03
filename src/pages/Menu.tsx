@@ -10,7 +10,7 @@ import type {
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Edit, ImageIcon, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, Edit, ImageIcon, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/layout";
@@ -47,8 +47,10 @@ export default function MenuPage() {
   const [showAddonsModal, setShowAddonsModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingAddonsItem, setEditingAddonsItem] = useState<MenuItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [categorySubmitting, setCategorySubmitting] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({ ...emptyForm });
   const [selectedAddonGroupIds, setSelectedAddonGroupIds] = useState<number[]>(
@@ -312,13 +314,29 @@ export default function MenuPage() {
     )
       return;
     try {
-      await menuService.deleteMenuItem(id);
+      await menuService.disableMenuItem(id);
       toast.success("Menu item disabled");
       fetchMenu();
     } catch (err: any) {
       toast.error(
         err?.response?.data?.message || "Failed to disable menu item",
       );
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingItem) return;
+
+    try {
+      setDeleteSubmitting(true);
+      await menuService.deleteMenuItem(deletingItem.id);
+      toast.success("Menu item deleted");
+      setDeletingItem(null);
+      fetchMenu();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to delete menu item");
+    } finally {
+      setDeleteSubmitting(false);
     }
   };
 
@@ -450,6 +468,15 @@ export default function MenuPage() {
               Enable
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-xl text-red-500 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10"
+            onClick={() => setDeletingItem(row)}
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            Delete
+          </Button>
         </div>
       ),
     },
@@ -510,6 +537,42 @@ export default function MenuPage() {
         {editingAddonsItem ? (
           <MenuItemAddonsSection menuItemId={editingAddonsItem.id} onChange={fetchMenu} />
         ) : null}
+      </ModalShell>
+
+      <ModalShell
+        open={!!deletingItem}
+        title={deletingItem ? `Delete ${deletingItem.name}` : "Delete menu item"}
+        description="This permanently removes the menu item from management."
+        onClose={() => setDeletingItem(null)}
+        className="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
+            <p className="font-medium">Are you sure you want to delete this menu item?</p>
+            <p className="mt-1 text-red-700/90 dark:text-red-200/80">
+              {deletingItem?.name} will be removed from the menu list.
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleteSubmitting}
+              className="flex-1 rounded-xl"
+            >
+              {deleteSubmitting ? "Deleting..." : "Delete Item"}
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 rounded-xl"
+              onClick={() => setDeletingItem(null)}
+              disabled={deleteSubmitting}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </ModalShell>
 
       {/* ========== CREATE / EDIT MENU ITEM ========== */}
