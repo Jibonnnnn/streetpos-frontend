@@ -78,16 +78,12 @@ export default function InventoryPage() {
     );
   }, [items, search]);
 
-  const getItemValue = (item: InventoryItemResponse) =>
-    Number(
-      item.stockValue ??
-        Number(item.currentStock ?? 0) * Number(item.unitCost ?? 0),
-    );
-
-  const totalValue = items.reduce(
-    (s, i) => s + getItemValue(i),
-    0,
-  );
+  const getItemValue = (item: InventoryItemResponse) => {
+    const stock = Number(item.currentStock ?? 0);
+    const cost = Number(item.unitCost ?? 0);
+    return stock * cost;
+  };
+  const totalValue = items.reduce((s, i) => s + getItemValue(i), 0);
   const lowStockCount = items.filter((i) => i.isLowStock).length;
 
   const handleCreate = async () => {
