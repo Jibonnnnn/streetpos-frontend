@@ -19,7 +19,6 @@ import {
   LandingCard,
 } from "@/components/landing/landing-components";
 import { OnlineOrderSection } from "@/components/landing/OnlineOrderSection";
-import { MenuOrderModal } from "@/components/landing/MenuOrderModal";
 import type { MenuItem } from "@/types";
 
 function toNumber(value: number | string): number {
@@ -32,8 +31,7 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(true);
   const [activeSlide, setActiveSlide] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [menuModalOpen, setMenuModalOpen] = useState(false);
-  const [menuModalCategory, setMenuModalCategory] = useState<string | null>(null);
+  const [orderCategory, setOrderCategory] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMenu = async () => {
@@ -93,18 +91,13 @@ export default function LandingPage() {
     document.getElementById("order")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const openMenuModal = (category?: string | null) => {
+  // Scroll to unified order section (browse + add-ons + cart)
+  const goToMenuCategory = (category?: string | null) => {
     setMobileNavOpen(false);
-    setMenuModalCategory(category ?? null);
-    setMenuModalOpen(true);
+    setOrderCategory(category ?? "All");
+    document.getElementById("order")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const closeMenuModal = () => {
-    setMenuModalOpen(false);
-    setMenuModalCategory(null);
-  };
-
-  // All unique categories for clickable chips on the landing page
   const allCategories = useMemo(() => {
     const set = new Set<string>();
     for (const item of menuItems) {
@@ -388,13 +381,13 @@ export default function LandingPage() {
             <LandingSection
               eyebrow="Menu"
               title="Browse by category"
-              description="Tap a category to open the full menu for that section — or view everything in one popup."
+              description="Tap a category to jump to ordering — choose items, add-ons, and checkout in one place."
             />
             <Button
               className="rounded-2xl shrink-0"
-              onClick={() => openMenuModal(null)}
+              onClick={() => goToMenuCategory("All")}
             >
-              View full menu
+              Order now
             </Button>
           </div>
 
@@ -403,7 +396,7 @@ export default function LandingPage() {
             <div className="mb-8 flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => openMenuModal(null)}
+                onClick={() => goToMenuCategory("All")}
                 className="rounded-full border border-amber-300/80 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 transition hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100"
               >
                 All menu
@@ -412,7 +405,7 @@ export default function LandingPage() {
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => openMenuModal(cat)}
+                  onClick={() => goToMenuCategory(cat)}
                   className="rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-amber-500/40 dark:hover:bg-amber-950/30"
                 >
                   {cat}
@@ -445,11 +438,11 @@ export default function LandingPage() {
                     key={item.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => openMenuModal(item.categoryName)}
+                    onClick={() => goToMenuCategory(item.categoryName)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        openMenuModal(item.categoryName);
+                        goToMenuCategory(item.categoryName);
                       }
                     }}
                     className="group cursor-pointer overflow-hidden rounded-3xl border-white/70 bg-white/75 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-zinc-900/60"
@@ -495,7 +488,10 @@ export default function LandingPage() {
         </section>
 
         {/* ========== ONLINE ORDER ========== */}
-        <OnlineOrderSection />
+        <OnlineOrderSection
+          selectedCategory={orderCategory}
+          onCategoryApplied={() => setOrderCategory(null)}
+        />
 
         {/* ========== STORY ========== */}
         <section
@@ -586,10 +582,10 @@ export default function LandingPage() {
             </div>
             <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-600 dark:text-zinc-400">
               <a
-                href="#menu"
+                href="#order"
                   onClick={(e) => {
                     e.preventDefault();
-                    openMenuModal(null);
+                    goToMenuCategory("All");
                   }}
                 className="hover:text-zinc-950 dark:hover:text-white"
               >
@@ -629,14 +625,6 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-
-      <MenuOrderModal
-        open={menuModalOpen}
-        onClose={closeMenuModal}
-        menuItems={menuItems.filter((m) => m.isActive !== false)}
-        loading={loading}
-        initialCategory={menuModalCategory}
-      />
-    </div>
+</div>
   );
 }
