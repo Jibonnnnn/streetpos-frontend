@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Banknote,
   Boxes,
+  Trash2,
 } from "lucide-react";
 import type { InventoryItemResponse } from "@/types";
 
@@ -47,6 +48,11 @@ export default function InventoryPage() {
   const [adjustForm, setAdjustForm] = useState(emptyAdjust);
   const [adjusting, setAdjusting] = useState(false);
 
+  const [deleteItem, setDeleteItem] = useState<InventoryItemResponse | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
+
   const fetchItems = async () => {
     try {
       setLoading(true);
@@ -72,8 +78,14 @@ export default function InventoryPage() {
     );
   }, [items, search]);
 
+  const getItemValue = (item: InventoryItemResponse) =>
+    Number(
+      item.stockValue ??
+        Number(item.currentStock ?? 0) * Number(item.unitCost ?? 0),
+    );
+
   const totalValue = items.reduce(
-    (s, i) => s + Number(i.currentStock ?? 0) * Number(i.unitCost ?? 0),
+    (s, i) => s + getItemValue(i),
     0,
   );
   const lowStockCount = items.filter((i) => i.isLowStock).length;
@@ -148,6 +160,26 @@ export default function InventoryPage() {
       toast.error(err?.response?.data?.message || "Failed to adjust stock");
     } finally {
       setAdjusting(false);
+    }
+  };
+
+  const openDelete = (item: InventoryItemResponse) => {
+    setDeleteItem(item);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteItem) return;
+
+    try {
+      setDeleting(true);
+      await inventoryService.deleteInventoryItem(deleteItem.id);
+      toast.success("Inventory item deleted");
+      setDeleteItem(null);
+      fetchItems();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to delete item");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -309,10 +341,7 @@ export default function InventoryPage() {
                       </td>
                       <td className="py-3.5 pr-4 font-medium text-amber-700 dark:text-amber-400">
                         ₱
-                        {(
-                          Number(item.currentStock ?? 0) *
-                          Number(item.unitCost ?? 0)
-                        ).toLocaleString("en-PH", {
+                        {getItemValue(item).toLocaleString("en-PH", {
                           minimumFractionDigits: 2,
                         })}
                       </td>
@@ -327,14 +356,25 @@ export default function InventoryPage() {
                         </BadgePill>
                       </td>
                       <td className="py-3.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl"
-                          onClick={() => openAdjust(item)}
-                        >
-                          Adjust
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl"
+                            onClick={() => openAdjust(item)}
+                          >
+                            Adjust
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10"
+                            onClick={() => openDelete(item)}
+                          >
+                            <Trash2 className="mr-1.5 h-4 w-4" />
+                            Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -582,6 +622,48 @@ export default function InventoryPage() {
                 className="flex-1 rounded-xl"
                 onClick={() => setAdjustItem(null)}
                 disabled={adjusting}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {/* Delete Modal */}
+      {deleteItem && (
+        <ModalShell
+          open={!!deleteItem}
+          title={`Delete — ${deleteItem.name}`}
+          description="This removes the inventory item permanently."
+          onClose={() => setDeleteItem(null)}
+          className="max-w-md"
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
+              <p className="font-medium">
+                Are you sure you want to delete this item?
+              </p>
+              <p className="mt-1 text-red-700/90 dark:text-red-200/80">
+                {deleteItem.name} currently has {deleteItem.currentStock}{" "}
+                {deleteItem.unit} in stock.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 rounded-xl"
+              >
+                {deleting ? "Deleting..." : "Delete Item"}
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => setDeleteItem(null)}
+                disabled={deleting}
               >
                 Cancel
               </Button>
