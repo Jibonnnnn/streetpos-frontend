@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { homePathForRole, normalizeRole } from '@/lib/roles';
 import { authService } from '@/services/auth.service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,9 +33,11 @@ export function LoginForm() {
       const response = await authService.login(email, password);
       const { token, fullName, role } = response.data;
 
+      const normalizedRole = normalizeRole(role) ?? role;
       localStorage.setItem('token', token);
+      localStorage.setItem('accessToken', token);
       localStorage.setItem('fullName', fullName);
-      localStorage.setItem('userRole', role);
+      localStorage.setItem('userRole', normalizedRole);
 
       if (rememberMe && email.trim()) {
         localStorage.setItem('rememberedEmail', email.trim());
@@ -42,7 +45,8 @@ export function LoginForm() {
         localStorage.removeItem('rememberedEmail');
       }
 
-      navigate('/dashboard');
+      // Cashier → POS; Manager/Admin → Dashboard
+      navigate(homePathForRole(normalizeRole(normalizedRole)));
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials');
     } finally {

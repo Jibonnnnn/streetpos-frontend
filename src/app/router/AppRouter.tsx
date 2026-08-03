@@ -13,24 +13,44 @@ import ReportsPage from "@/pages/Reports";
 import CategoriesPage from "@/pages/Categories";
 import PromotionsPage from "@/pages/Promotions";
 import AddonsPage from "@/pages/Addons";
+import { getStoredRole, getStoredToken, homePathForRole } from "@/lib/roles";
+
+function CatchAllRedirect() {
+  const token = getStoredToken();
+  const role = getStoredRole();
+  if (!token || !role) return <Navigate to="/login" replace />;
+  return <Navigate to={homePathForRole(role)} replace />;
+}
 
 export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginForm />} />
 
-        {/* All protected pages with sidebar */}
+        {/* Authenticated app shell */}
         <Route element={<AppLayout />}>
+          {/* All roles */}
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["Admin", "Manager", "Cashier"]}>
                 <Dashboard />
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/cashier"
+            element={
+              <ProtectedRoute allowedRoles={["Admin", "Manager", "Cashier"]}>
+                <CashierPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Admin + Manager */}
           <Route
             path="/inventory"
             element={
@@ -64,26 +84,18 @@ export function AppRouter() {
             }
           />
           <Route
+            path="/addons"
+            element={
+              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
+                <AddonsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/manager"
             element={
               <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
                 <ManagerPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cashier"
-            element={
-              <ProtectedRoute allowedRoles={["Admin", "Manager", "Cashier"]}>
-                <CashierPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/users"
-            element={
-              <ProtectedRoute allowedRoles={["Admin"]}>
-                <UsersPage />
               </ProtectedRoute>
             }
           />
@@ -95,17 +107,20 @@ export function AppRouter() {
               </ProtectedRoute>
             }
           />
+
+          {/* Admin only */}
           <Route
-            path="addons"
+            path="/users"
             element={
-              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
-                <AddonsPage />
+              <ProtectedRoute allowedRoles={["Admin"]}>
+                <UsersPage />
               </ProtectedRoute>
             }
           />
         </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Unknown → role home (or login) */}
+        <Route path="*" element={<CatchAllRedirect />} />
       </Routes>
     </BrowserRouter>
   );

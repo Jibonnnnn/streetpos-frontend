@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom"
+import { normalizeRole, type AppRole } from "@/lib/roles";;
 import { useAuth } from "@/hooks/useAuth";
-import { Layers, Percent } from "lucide-react";
+import { Layers, Percent, FileText} from "lucide-react";
 import {
   LayoutDashboard,
   Coffee,
@@ -21,37 +22,43 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
-  roles: string[];
+  roles: AppRole[];
   parent?: string;
 }
 
 const navItems: NavItem[] = [
+  // All roles
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["Admin", "Manager", "Cashier"] },
   { label: "POS Terminal", href: "/cashier", icon: Coffee, roles: ["Admin", "Manager", "Cashier"] },
+
+  // Admin + Manager
   { label: "Inventory", href: "/inventory", icon: Boxes, roles: ["Admin", "Manager"] },
   { label: "Menu Management", href: "/menu", icon: Coffee, roles: ["Admin", "Manager"] },
-  { 
-    label: "Categories", 
-    href: "/categories", 
-    icon: Tags, 
+  {
+    label: "Categories",
+    href: "/categories",
+    icon: Tags,
     roles: ["Admin", "Manager"],
-    parent: "Menu Management" 
+    parent: "Menu Management",
   },
   {
     label: "Promotions",
     href: "/promotions",
-    icon: Percent,          // or Percent
+    icon: Percent,
     roles: ["Admin", "Manager"],
     parent: "Menu Management",
   },
-  { 
-    label: "Add-ons", 
-    href: "/addons", 
-    icon: Layers, 
+  {
+    label: "Add-ons",
+    href: "/addons",
+    icon: Layers,
     roles: ["Admin", "Manager"],
     parent: "Menu Management",
   },
   { label: "Manager Hub", href: "/manager", icon: BarChart3, roles: ["Admin", "Manager"] },
+  { label: "Reports", href: "/reports", icon: FileText, roles: ["Admin", "Manager"] },
+
+  // Admin only
   { label: "Staff Management", href: "/users", icon: Users, roles: ["Admin"] },
 ];
 
@@ -211,12 +218,13 @@ export default function AppLayout() {
   // Read user info from localStorage (same source as ProtectedRoute & LoginForm)
   const user = {
     fullName: localStorage.getItem("fullName") || "User",
-    role: localStorage.getItem("userRole") || "",
+    role: normalizeRole(localStorage.getItem("userRole")) || localStorage.getItem("userRole") || "",
   };
   // ========================
 
+  const storedRole = normalizeRole(user.role);
   const filteredNavItems = navItems.filter((item) =>
-    item.roles.includes(user.role),
+    storedRole ? item.roles.includes(storedRole) : false,
   );
 
   const accentClass = roleAccent[user.role] ?? "from-zinc-900 to-zinc-700";
