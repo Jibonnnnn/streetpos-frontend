@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { CartProvider } from '@/contexts/CartContext';
+import { Analytics } from '@vercel/analytics/react';
 import type { ReactNode } from 'react';
 
 const queryClient = new QueryClient({
@@ -23,6 +24,8 @@ export function AppProviders({ children }: AppProvidersProps) {
       <CartProvider>
         <Toaster position="top-center" richColors closeButton />
         {children}
+        {/* Vercel Web Analytics — page views on production (streetsidecafe.vercel.app) */}
+        <Analytics />
       </CartProvider>
     </QueryClientProvider>
   );
