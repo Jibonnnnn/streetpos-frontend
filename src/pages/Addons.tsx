@@ -7,6 +7,8 @@ import { AddonGroupFormFields } from "@/components/addons/AddonGroupForm";
 import { addonService } from "@/services/addon.service";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, RefreshCw, Layers } from "lucide-react";
+import { Pagination } from "@/components/common/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import type { ModifierGroup, AddonGroupForm } from "@/types/addons";
 
 function toForm(g: ModifierGroup): AddonGroupForm {
@@ -98,6 +100,18 @@ export default function AddonsPage() {
     }
   };
 
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    total,
+    paginated,
+    from,
+    to,
+  } = usePagination(groups, 10);
+
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4 md:p-6">
       <div className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
@@ -140,7 +154,7 @@ export default function AddonsPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {groups.map((g) => (
+          {paginated.map((g) => (
             <Card
               key={g.id}
               className="border-border/60 bg-white/90 shadow-sm dark:bg-zinc-950/60"
@@ -199,6 +213,16 @@ export default function AddonsPage() {
                   ))}
                 </ul>
               </CardContent>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                from={from}
+                to={to}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+              />
             </Card>
           ))}
         </div>

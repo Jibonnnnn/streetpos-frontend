@@ -3,6 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BadgePill } from "@/components/common/BadgePill";
+import { Pagination } from "@/components/common/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { CashierSkeleton } from "@/components/skeletons/CashierSkeleton";
 import { AddonPicker } from "@/components/addons/AddonPicker";
@@ -149,6 +151,11 @@ export default function CashierPage() {
           m.categoryName?.toLowerCase().includes(q)),
     );
   }, [menuItems, searchTerm]);
+
+  const menuPage = usePagination<MenuItem>(filteredMenu, 12);
+  const tabsPage = usePagination<OrderResponse>(openTabs, 10);
+  const onlinePage = usePagination<any>(onlineOrders, 10);
+  const recentPage = usePagination<any>(myOrders, 5);
 
   // ---------- promotion preview ----------
   const calculatePreviewDiscount = (promo: Promotion | null) => {
@@ -532,8 +539,9 @@ export default function CashierPage() {
                 No open tabs right now.
               </div>
             ) : (
+              <>
               <div className="space-y-4">
-                {openTabs.map((order) => {
+                {tabsPage.paginated.map((order) => {
                   const items = order.items || (order as any).orderItems || [];
                   const displayName =
                     order.customerName?.trim() ||
@@ -617,6 +625,17 @@ export default function CashierPage() {
                   );
                 })}
               </div>
+              <Pagination
+                page={tabsPage.page}
+                totalPages={tabsPage.totalPages}
+                total={tabsPage.total}
+                from={tabsPage.from}
+                to={tabsPage.to}
+                onPageChange={tabsPage.setPage}
+                pageSize={tabsPage.pageSize}
+                onPageSizeChange={tabsPage.setPageSize}
+              />
+              </>
             )}
           </CardContent>
         </Card>
@@ -654,8 +673,9 @@ export default function CashierPage() {
                 No online orders yet.
               </div>
             ) : (
+              <>
               <div className="space-y-4">
-                {onlineOrders.map((order) => {
+                {onlinePage.paginated.map((order) => {
                   const items = order.items || order.orderItems || [];
                   const isExpanded = expandedOnlineOrderId === order.id;
 
@@ -807,6 +827,17 @@ export default function CashierPage() {
                   );
                 })}
               </div>
+              <Pagination
+                page={onlinePage.page}
+                totalPages={onlinePage.totalPages}
+                total={onlinePage.total}
+                from={onlinePage.from}
+                to={onlinePage.to}
+                onPageChange={onlinePage.setPage}
+                pageSize={onlinePage.pageSize}
+                onPageSizeChange={onlinePage.setPageSize}
+              />
+              </>
             )}
           </CardContent>
         </Card>
@@ -866,7 +897,7 @@ export default function CashierPage() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {filteredMenu.map((item: MenuItem) => {
+                    {menuPage.paginated.map((item) => {
                       const hasLowStock = item.inventoryLinks?.some(
                         (link) => link.quantityUsedPerUnit > 5,
                       );
@@ -941,6 +972,19 @@ export default function CashierPage() {
                     <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
                       No menu items match your search.
                     </div>
+                  )}
+
+                  {filteredMenu.length > 0 && (
+                    <Pagination
+                      page={menuPage.page}
+                      totalPages={menuPage.totalPages}
+                      total={menuPage.total}
+                      from={menuPage.from}
+                      to={menuPage.to}
+                      onPageChange={menuPage.setPage}
+                      pageSize={menuPage.pageSize}
+                      onPageSizeChange={menuPage.setPageSize}
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -1148,7 +1192,7 @@ export default function CashierPage() {
                         No recent orders yet.
                       </div>
                     ) : (
-                      myOrders.slice(0, 5).map((order: any) => (
+                      recentPage.paginated.map((order: any) => (
                         <div
                           key={order.id}
                           className="rounded-2xl border border-border/60 bg-zinc-50 p-4 dark:bg-zinc-950/50"
@@ -1197,6 +1241,18 @@ export default function CashierPage() {
                       ))
                     )}
                   </div>
+                  {myOrders.length > 0 && (
+                    <Pagination
+                      page={recentPage.page}
+                      totalPages={recentPage.totalPages}
+                      total={recentPage.total}
+                      from={recentPage.from}
+                      to={recentPage.to}
+                      onPageChange={recentPage.setPage}
+                      pageSize={recentPage.pageSize}
+                      onPageSizeChange={recentPage.setPageSize}
+                    />
+                  )}
                 </CardContent>
               </Card>
             </div>

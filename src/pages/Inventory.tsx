@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { BadgePill } from "@/components/common/BadgePill";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { inventoryService } from "@/services/inventory.service";
+import { Pagination } from "@/components/common/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { toast } from "sonner";
 import {
   Plus,
@@ -77,6 +79,18 @@ export default function InventoryPage() {
         i.name.toLowerCase().includes(q) || i.unit?.toLowerCase().includes(q),
     );
   }, [items, search]);
+
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    total,
+    paginated,
+    from,
+    to,
+  } = usePagination(filtered, 10);
 
   const getItemValue = (item: InventoryItemResponse) => {
     const stock = Number(item.currentStock ?? 0);
@@ -313,7 +327,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((item) => (
+                  {paginated.map((item) => (
                     <tr
                       key={item.id}
                       className="border-b border-border/40 last:border-0"
@@ -376,6 +390,16 @@ export default function InventoryPage() {
                   ))}
                 </tbody>
               </table>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={total}
+                from={from}
+                to={to}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                onPageSizeChange={setPageSize}
+              />
             </div>
           )}
         </CardContent>

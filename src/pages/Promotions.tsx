@@ -6,6 +6,8 @@ import { BadgePill } from "@/components/common/BadgePill";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { promotionService } from "@/services/promotion.service";
 import { menuService } from "@/services/menu.service";
+import { Pagination } from "@/components/common/Pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { toast } from "sonner";
 import {
   Plus,
@@ -163,6 +165,18 @@ export default function PromotionsPage() {
       p.type.toLowerCase().includes(search.toLowerCase()),
   );
 
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    total,
+    paginated,
+    from,
+    to,
+  } = usePagination(filtered, 10);
+
   const activeCount = promos.filter((p) => p.isActive).length;
   const totalUsage = promos.reduce((s, p) => s + (p.usageCount || 0), 0);
 
@@ -270,7 +284,7 @@ export default function PromotionsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((p) => {
+              {paginated.map((p) => {
                 const meta = typeMeta[p.type] || typeMeta.Percentage;
                 const Icon = meta.icon;
 
@@ -306,9 +320,7 @@ export default function PromotionsPage() {
                           {p.minOrderAmount
                             ? ` · Min ₱${p.minOrderAmount}`
                             : ""}
-                          {p.usageCount > 0
-                            ? ` · Used ${p.usageCount}×`
-                            : ""}
+                          {p.usageCount > 0 ? ` · Used ${p.usageCount}×` : ""}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {p.menuItemNames?.length
@@ -343,6 +355,16 @@ export default function PromotionsPage() {
                         </span>
                       </Button>
                     </div>
+                    <Pagination
+                      page={page}
+                      totalPages={totalPages}
+                      total={total}
+                      from={from}
+                      to={to}
+                      onPageChange={setPage}
+                      pageSize={pageSize}
+                      onPageSizeChange={setPageSize}
+                    />
                   </div>
                 );
               })}
@@ -429,7 +451,9 @@ export default function PromotionsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Start</label>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Start
+                </label>
                 <Input
                   type="datetime-local"
                   value={form.startDate}
