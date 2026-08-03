@@ -755,19 +755,25 @@ export default function MenuPage() {
                     ))}
                   </select>
                   <Input
-                    type="number"
-                    min={0}
-                    step="any"
+                    type="text"
+                    inputMode="decimal"
                     className="w-24 rounded-xl"
-                    value={
-                      link.quantityUsedPerUnit === 0
-                        ? ""
-                        : link.quantityUsedPerUnit
-                    }
+                    placeholder="e.g. 0.018"
+                    value={String(link.quantityUsedPerUnit ?? "")}
                     onChange={(e) => {
-                      const raw = e.target.value;
+                      const v = e.target.value;
+                      // Allow "", "0.", "0.018"
+                      if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                        updateInventoryLink(index, {
+                          quantityUsedPerUnit: v as unknown as number,
+                        });
+                      }
+                    }}
+                    onBlur={() => {
+                      const n = parseFloat(String(link.quantityUsedPerUnit));
                       updateInventoryLink(index, {
-                        quantityUsedPerUnit: raw === "" ? 0 : Number(raw),
+                        quantityUsedPerUnit:
+                          Number.isFinite(n) && n >= 0 ? n : 0,
                       });
                     }}
                   />
