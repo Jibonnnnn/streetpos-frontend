@@ -5,8 +5,6 @@ import { Input } from "@/components/ui/input";
 import { BadgePill } from "@/components/common/BadgePill";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { inventoryService } from "@/services/inventory.service";
-import { Pagination } from "@/components/common/Pagination";
-import { usePagination } from "@/hooks/usePagination";
 import { toast } from "sonner";
 import {
   Plus,
@@ -30,7 +28,8 @@ const emptyCreate = {
 };
 
 const emptyAdjust = {
-  quantityChange: 0,
+  mode: "restock" as "restock" | "deduct",
+  quantity: 0,
   reason: "",
   unitCost: 0,
 };
@@ -80,24 +79,16 @@ export default function InventoryPage() {
     );
   }, [items, search]);
 
-  const {
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
-    totalPages,
-    total,
-    paginated,
-    from,
-    to,
-  } = usePagination(filtered, 10);
-
   const getItemValue = (item: InventoryItemResponse) => {
     const stock = Number(item.currentStock ?? 0);
     const cost = Number(item.unitCost ?? 0);
     return stock * cost;
   };
-  const totalValue = items.reduce((s, i) => s + getItemValue(i), 0);
+
+  const totalValue = items.reduce(
+    (s, i) => s + getItemValue(i),
+    0,
+  );
   const lowStockCount = items.filter((i) => i.isLowStock).length;
 
   const handleCreate = async () => {
@@ -135,7 +126,8 @@ export default function InventoryPage() {
   const openAdjust = (item: InventoryItemResponse) => {
     setAdjustItem(item);
     setAdjustForm({
-      quantityChange: 0,
+      mode: "restock",
+      quantity: 0,
       reason: "",
       unitCost: item.unitCost ?? 0,
     });
@@ -143,25 +135,46 @@ export default function InventoryPage() {
 
   const handleAdjust = async () => {
     if (!adjustItem) return;
-    if (adjustForm.quantityChange === 0) {
-      toast.error("Quantity change cannot be zero");
+
+    const qty = Number(adjustForm.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error("Enter a quantity greater than 0");
       return;
     }
-    if (adjustForm.quantityChange > 0 && adjustForm.unitCost <= 0) {
+
+    if (adjustForm.mode === "restock" && Number(adjustForm.unitCost) <= 0) {
       toast.error("Unit cost is required when restocking");
       return;
     }
 
+    if (
+      adjustForm.mode === "deduct" &&
+      qty > Number(adjustItem.currentStock)
+    ) {
+      toast.error(
+        `Cannot deduct more than current stock (${adjustItem.currentStock} ${adjustItem.unit})`,
+      );
+      return;
+    }
+
+    // API expects signed quantityChange: + restock, − deduct
+    const quantityChange =
+      adjustForm.mode === "restock" ? qty : -qty;
+
     try {
       setAdjusting(true);
       await inventoryService.adjustInventoryItem(adjustItem.id, {
-        quantityChange: adjustForm.quantityChange,
-        reason: adjustForm.reason.trim() || "Stock adjustment",
+        quantityChange,
+        reason:
+          adjustForm.reason.trim() ||
+          (adjustForm.mode === "restock" ? "Restock" : "Stock deduction"),
         unitCost:
-          adjustForm.quantityChange > 0 ? adjustForm.unitCost : undefined,
+          adjustForm.mode === "restock"
+            ? Number(adjustForm.unitCost)
+            : undefined,
       });
       toast.success(
-        adjustForm.quantityChange > 0 ? "Stock restocked" : "Stock deducted",
+        adjustForm.mode === "restock" ? "Stock restocked" : "Stock deducted",
       );
       setAdjustItem(null);
       setAdjustForm(emptyAdjust);
@@ -327,7 +340,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginated.map((item) => (
+                  {filtered.map((item) => (
                     <tr
                       key={item.id}
                       className="border-b border-border/40 last:border-0"
@@ -390,16 +403,6 @@ export default function InventoryPage() {
                   ))}
                 </tbody>
               </table>
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                total={total}
-                from={from}
-                to={to}
-                onPageChange={setPage}
-                pageSize={pageSize}
-                onPageSizeChange={setPageSize}
-              />
             </div>
           )}
         </CardContent>
@@ -567,28 +570,67 @@ export default function InventoryPage() {
           className="max-w-md"
         >
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={adjustForm.mode === "restock" ? "default" : "outline"}
+                className="rounded-xl"
+                onClick={() =>
+                  setAdjustForm({ ...adjustForm, mode: "restock" })
+                }
+              >
+                Restock (+)
+              </Button>
+              <Button
+                type="button"
+                variant={adjustForm.mode === "deduct" ? "default" : "outline"}
+                className="rounded-xl"
+                onClick={() =>
+                  setAdjustForm({ ...adjustForm, mode: "deduct" })
+                }
+              >
+                Deduct (−)
+              </Button>
+            </div>
+
             <div>
               <label className="mb-1.5 block text-sm font-medium">
-                Quantity Change
+                Quantity ({adjustItem.unit})
               </label>
               <Input
                 type="number"
-                value={adjustForm.quantityChange}
-                onChange={(e) =>
+                min={0}
+                step="any"
+                value={adjustForm.quantity === 0 ? "" : adjustForm.quantity}
+                onChange={(e) => {
+                  const raw = e.target.value;
                   setAdjustForm({
                     ...adjustForm,
-                    quantityChange: parseFloat(e.target.value) || 0,
-                  })
-                }
-                placeholder="+10 to restock, -5 to remove"
+                    quantity: raw === "" ? 0 : Number(raw),
+                  });
+                }}
+                placeholder="e.g. 10"
                 className="rounded-xl"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Use positive to restock, negative to deduct.
-              </p>
+              {adjustForm.quantity > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  New stock will be{" "}
+                  <span className="font-medium text-foreground">
+                    {adjustForm.mode === "restock"
+                      ? Number(adjustItem.currentStock) +
+                        Number(adjustForm.quantity)
+                      : Math.max(
+                          0,
+                          Number(adjustItem.currentStock) -
+                            Number(adjustForm.quantity),
+                        )}{" "}
+                    {adjustItem.unit}
+                  </span>
+                </p>
+              )}
             </div>
 
-            {adjustForm.quantityChange > 0 && (
+            {adjustForm.mode === "restock" && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium">
                   Unit Cost (₱) <span className="text-red-500">*</span>
@@ -597,20 +639,22 @@ export default function InventoryPage() {
                   type="number"
                   min={0}
                   step="0.01"
-                  value={adjustForm.unitCost}
-                  onChange={(e) =>
+                  value={adjustForm.unitCost === 0 ? "" : adjustForm.unitCost}
+                  onChange={(e) => {
+                    const raw = e.target.value;
                     setAdjustForm({
                       ...adjustForm,
-                      unitCost: parseFloat(e.target.value) || 0,
-                    })
-                  }
+                      unitCost: raw === "" ? 0 : Number(raw),
+                    });
+                  }}
+                  placeholder="0.00"
                   className="rounded-xl"
                 />
-                {adjustForm.unitCost > 0 && (
+                {adjustForm.quantity > 0 && adjustForm.unitCost > 0 && (
                   <p className="mt-1.5 text-sm text-muted-foreground">
                     Line total: ₱
                     {(
-                      adjustForm.quantityChange * adjustForm.unitCost
+                      Number(adjustForm.quantity) * Number(adjustForm.unitCost)
                     ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
                   </p>
                 )}
@@ -635,7 +679,11 @@ export default function InventoryPage() {
                 disabled={adjusting}
                 className="flex-1 rounded-xl"
               >
-                {adjusting ? "Saving..." : "Save Adjustment"}
+                {adjusting
+                  ? "Saving..."
+                  : adjustForm.mode === "restock"
+                    ? "Confirm Restock"
+                    : "Confirm Deduct"}
               </Button>
               <Button
                 variant="outline"
