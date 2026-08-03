@@ -10,14 +10,7 @@ import type {
 } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Plus,
-  Edit,
-  ImageIcon,
-  RefreshCw,
-  Loader2,
-  Trash2,
-} from "lucide-react";
+import { Plus, Edit, ImageIcon, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { DataTable } from "@/components/common/DataTable";
 import { PageHeader } from "@/components/layout";
@@ -53,9 +46,7 @@ export default function MenuPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showAddonsModal, setShowAddonsModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-  const [editingAddonsItem, setEditingAddonsItem] = useState<MenuItem | null>(
-    null,
-  );
+  const [editingAddonsItem, setEditingAddonsItem] = useState<MenuItem | null>(null);
   const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [categorySubmitting, setCategorySubmitting] = useState(false);
@@ -263,10 +254,14 @@ export default function MenuPage() {
     if (formData.availableUntil)
       formDataToSend.append("availableUntil", formData.availableUntil);
 
-    formDataToSend.append(
-      "inventoryLinks",
-      JSON.stringify(formData.inventoryLinks || []),
-    );
+    const normalizedLinks = (formData.inventoryLinks || []).map((l) => ({
+      inventoryItemId: Number(l.inventoryItemId),
+      quantityUsedPerUnit: (() => {
+        const n = parseFloat(String(l.quantityUsedPerUnit));
+        return Number.isFinite(n) && n >= 0 ? n : 0;
+      })(),
+    }));
+    formDataToSend.append("inventoryLinks", JSON.stringify(normalizedLinks));
 
     if (imageFile) {
       formDataToSend.append("image", imageFile);
@@ -537,36 +532,27 @@ export default function MenuPage() {
 
       <ModalShell
         open={showAddonsModal}
-        title={
-          editingAddonsItem ? `${editingAddonsItem.name} Add-ons` : "Add-ons"
-        }
+        title={editingAddonsItem ? `${editingAddonsItem.name} Add-ons` : "Add-ons"}
         description="Attach the groups that should appear for this menu item in POS and online ordering."
         onClose={closeAddonsModal}
         className="max-w-2xl"
         overlayClassName="bg-zinc-950/35 backdrop-blur-[0.5px]"
       >
         {editingAddonsItem ? (
-          <MenuItemAddonsSection
-            menuItemId={editingAddonsItem.id}
-            onChange={fetchMenu}
-          />
+          <MenuItemAddonsSection menuItemId={editingAddonsItem.id} onChange={fetchMenu} />
         ) : null}
       </ModalShell>
 
       <ModalShell
         open={!!deletingItem}
-        title={
-          deletingItem ? `Delete ${deletingItem.name}` : "Delete menu item"
-        }
+        title={deletingItem ? `Delete ${deletingItem.name}` : "Delete menu item"}
         description="This permanently removes the menu item from management."
         onClose={() => setDeletingItem(null)}
         className="max-w-md"
       >
         <div className="space-y-4">
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200">
-            <p className="font-medium">
-              Are you sure you want to delete this menu item?
-            </p>
+            <p className="font-medium">Are you sure you want to delete this menu item?</p>
             <p className="mt-1 text-red-700/90 dark:text-red-200/80">
               {deletingItem?.name} will be removed from the menu list.
             </p>
@@ -762,9 +748,10 @@ export default function MenuPage() {
                     value={String(link.quantityUsedPerUnit ?? "")}
                     onChange={(e) => {
                       const v = e.target.value;
-                      // Allow "", "0.", "0.018"
+                      // Allow intermediate decimals: "", "0.", "0.018"
                       if (v === "" || /^\d*\.?\d*$/.test(v)) {
                         updateInventoryLink(index, {
+                          // keep raw string while typing (cast for form state)
                           quantityUsedPerUnit: v as unknown as number,
                         });
                       }
@@ -772,8 +759,7 @@ export default function MenuPage() {
                     onBlur={() => {
                       const n = parseFloat(String(link.quantityUsedPerUnit));
                       updateInventoryLink(index, {
-                        quantityUsedPerUnit:
-                          Number.isFinite(n) && n >= 0 ? n : 0,
+                        quantityUsedPerUnit: Number.isFinite(n) && n >= 0 ? n : 0,
                       });
                     }}
                   />
