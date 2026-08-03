@@ -19,6 +19,7 @@ import {
   LandingCard,
 } from "@/components/landing/landing-components";
 import { OnlineOrderSection } from "@/components/landing/OnlineOrderSection";
+import { MenuOrderModal } from "@/components/landing/MenuOrderModal";
 import type { MenuItem } from "@/types";
 
 function toNumber(value: number | string): number {
@@ -31,6 +32,8 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(true);
   const [activeSlide, setActiveSlide] = useState(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [menuModalOpen, setMenuModalOpen] = useState(false);
+  const [menuModalCategory, setMenuModalCategory] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchMenu = async () => {
@@ -89,6 +92,27 @@ export default function LandingPage() {
     setMobileNavOpen(false);
     document.getElementById("order")?.scrollIntoView({ behavior: "smooth" });
   };
+
+  const openMenuModal = (category?: string | null) => {
+    setMobileNavOpen(false);
+    setMenuModalCategory(category ?? null);
+    setMenuModalOpen(true);
+  };
+
+  const closeMenuModal = () => {
+    setMenuModalOpen(false);
+    setMenuModalCategory(null);
+  };
+
+  // All unique categories for clickable chips on the landing page
+  const allCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of menuItems) {
+      if (item.isActive === false) continue;
+      if (item.categoryName?.trim()) set.add(item.categoryName.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [menuItems]);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#fff7ed] text-zinc-900 dark:bg-[#0c0a09] dark:text-zinc-50">
@@ -360,12 +384,42 @@ export default function LandingPage() {
           id="menu"
           className="mx-auto max-w-6xl px-4 pb-20 sm:px-6 lg:px-8"
         >
-          <LandingSection
-            eyebrow="Menu"
-            title="Favorites from every category"
-            description="A quick look at what guests order most — one pick from each category."
-            className="mb-8"
-          />
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <LandingSection
+              eyebrow="Menu"
+              title="Browse by category"
+              description="Tap a category to open the full menu for that section — or view everything in one popup."
+            />
+            <Button
+              className="rounded-2xl shrink-0"
+              onClick={() => openMenuModal(null)}
+            >
+              View full menu
+            </Button>
+          </div>
+
+          {/* Clickable categories */}
+          {!loading && allCategories.length > 0 && (
+            <div className="mb-8 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => openMenuModal(null)}
+                className="rounded-full border border-amber-300/80 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 transition hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100"
+              >
+                All menu
+              </button>
+              {allCategories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => openMenuModal(cat)}
+                  className="rounded-full border border-zinc-200 bg-white/80 px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-amber-500/40 dark:hover:bg-amber-950/30"
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
 
           {loading ? (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -389,7 +443,16 @@ export default function LandingPage() {
                 return (
                   <Card
                     key={item.id}
-                    className="group overflow-hidden rounded-3xl border-white/70 bg-white/75 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-zinc-900/60"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openMenuModal(item.categoryName)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openMenuModal(item.categoryName);
+                      }
+                    }}
+                    className="group cursor-pointer overflow-hidden rounded-3xl border-white/70 bg-white/75 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-zinc-900/60"
                   >
                     <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100 dark:bg-zinc-800">
                       {imageSrc ? (
@@ -524,6 +587,10 @@ export default function LandingPage() {
             <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-zinc-600 dark:text-zinc-400">
               <a
                 href="#menu"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openMenuModal(null);
+                  }}
                 className="hover:text-zinc-950 dark:hover:text-white"
               >
                 Menu
@@ -562,6 +629,14 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      <MenuOrderModal
+        open={menuModalOpen}
+        onClose={closeMenuModal}
+        menuItems={menuItems.filter((m) => m.isActive !== false)}
+        loading={loading}
+        initialCategory={menuModalCategory}
+      />
     </div>
   );
 }
