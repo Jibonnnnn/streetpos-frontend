@@ -46,7 +46,7 @@ export function homePathForRole(role: AppRole | null): string {
 
 /** Which roles may open each app path (must stay in sync with AppRouter). */
 export const ROUTE_ROLES: Record<string, AppRole[]> = {
-  "/dashboard": ["Admin", "Manager", "Cashier"],
+  "/dashboard": ["Admin", "Manager"],
   "/cashier": ["Admin", "Manager", "Cashier"],
   "/inventory": ["Admin", "Manager"],
   "/menu": ["Admin", "Manager"],
@@ -80,5 +80,5 @@ export const ROLE_LABELS: Record<AppRole, string> = {
 export const ROLE_DESCRIPTIONS: Record<AppRole, string> = {
   Admin: "Full access — staff, menu, inventory, reports, POS",
   Manager: "Operations — menu, inventory, promotions, reports, POS",
-  Cashier: "POS terminal — take orders and collect payments",
+  Cashier: "POS terminal only — take orders and collect payments",
 };

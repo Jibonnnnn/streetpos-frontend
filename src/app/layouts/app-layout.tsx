@@ -28,7 +28,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   // All roles
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["Admin", "Manager", "Cashier"] },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["Admin", "Manager"] },
   { label: "POS Terminal", href: "/cashier", icon: Coffee, roles: ["Admin", "Manager", "Cashier"] },
 
   // Admin + Manager

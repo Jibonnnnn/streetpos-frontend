@@ -36,7 +36,7 @@ export function AppRouter() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute allowedRoles={["Admin", "Manager", "Cashier"]}>
+              <ProtectedRoute allowedRoles={["Admin", "Manager"]}>
                 <Dashboard />
               </ProtectedRoute>
             }
