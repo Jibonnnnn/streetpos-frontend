@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ import { promotionService } from "@/services/promotion.service";
 import { addonService } from "@/services/addon.service";
 import { getFullImageUrl } from "@/lib/imageUtils";
 import { toast } from "sonner";
+import { ReceiptPreview } from "@/components/receipts/ReceiptPreview";
+import { printReceipt } from "@/lib/printReceipt";
 import {
   CreditCard,
   Plus,
@@ -26,6 +29,8 @@ import {
   Loader2,
   AlertTriangle,
   Globe,
+  Download,
+  Printer,
 } from "lucide-react";
 import type {
   MenuItem,
@@ -33,6 +38,7 @@ import type {
   CartItem,
   OrderResponse,
   PaymentMethod,
+  OrderReceiptDto,
 } from "@/types";
 import type { ModifierGroup } from "@/types/addons";
 
@@ -102,6 +108,11 @@ export default function CashierPage() {
   const [openTabsLoading, setOpenTabsLoading] = useState(false);
   const [settleOrderId, setSettleOrderId] = useState<number | null>(null);
   const [payLaterCustomerName, setPayLaterCustomerName] = useState("");
+
+  // Receipt success state (shown inside checkout modal after paid completion)
+  const [completedOrderId, setCompletedOrderId] = useState<number | null>(null);
+  const [receiptData, setReceiptData] = useState<OrderReceiptDto | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
 
   // ---------- data loaders ----------
   const fetchOnlineOrders = async () => {
@@ -305,6 +316,37 @@ export default function CashierPage() {
     setCheckoutOnlineOrderId(null);
     setSettleOrderId(null);
     setPayLaterCustomerName("");
+    setCompletedOrderId(null);
+    setReceiptData(null);
+    setReceiptLoading(false);
+  };
+
+  /** Load receipt after a completed (paid) order. */
+  const showReceiptForOrder = async (orderId: number) => {
+    try {
+      setReceiptLoading(true);
+      setCompletedOrderId(orderId);
+      const res = await ordersService.getReceiptData(orderId);
+      setReceiptData(res.data);
+    } catch {
+      toast.error("Could not load receipt.");
+      setCompletedOrderId(null);
+      setReceiptData(null);
+      closeCheckoutModal();
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+
+  const finishWithoutReceipt = () => {
+    setCompletedOrderId(null);
+    setReceiptData(null);
+    closeCheckoutModal();
+    setAmountTendered("");
+    setSelectedPaymentMethod("Cash");
+    setSelectedPromotionId(null);
+    setPreviewDiscount(0);
+    setPayLaterCustomerName("");
   };
 
   // ---------- checkout ----------
@@ -325,9 +367,9 @@ export default function CashierPage() {
     try {
       setIsCheckingOut(true);
 
-      // 1. Settle open tab
+      // 1. Settle open tab → Completed → show receipt
       if (settleOrderId) {
-        await ordersService.settlePayLater(settleOrderId, {
+        const settleRes = await ordersService.settlePayLater(settleOrderId, {
           paymentMethod: selectedPaymentMethod,
           amountTendered:
             selectedPaymentMethod === "Cash"
@@ -339,15 +381,17 @@ export default function CashierPage() {
         });
 
         toast.success("✅ Tab settled successfully!");
-        closeCheckoutModal();
         setAmountTendered("");
         setSelectedPaymentMethod("Cash");
         fetchOpenTabs();
         refetchOrders();
+
+        const settledId = settleRes.data?.id ?? settleOrderId;
+        await showReceiptForOrder(settledId);
         return;
       }
 
-      // 2. Online order checkout
+      // 2. Online order checkout → Completed → show receipt
       if (checkoutOnlineOrderId) {
         await ordersService.checkoutOrder({
           orderId: checkoutOnlineOrderId,
@@ -363,11 +407,12 @@ export default function CashierPage() {
         });
 
         toast.success("✅ Online order completed!");
-        closeCheckoutModal();
         setAmountTendered("");
         setSelectedPaymentMethod("Cash");
         fetchOnlineOrders();
         refetchOrders();
+
+        await showReceiptForOrder(checkoutOnlineOrderId);
         return;
       }
 
@@ -412,11 +457,21 @@ export default function CashierPage() {
             : undefined,
       });
 
+      clearCart();
+      setAmountTendered("");
+      setSelectedPaymentMethod("Cash");
+      setSelectedPromotionId(null);
+      setPreviewDiscount(0);
+      refetchOrders();
+
       if (selectedPaymentMethod === "PayLater") {
+        // Still Pending – no receipt yet
         toast.success("Order placed on tab (Pay Later)", {
-          description: "You can collect payment later from the Open Tabs tab.",
+          description:
+            "You can collect payment later from the Open Tabs tab.",
         });
         fetchOpenTabs();
+        finishWithoutReceipt();
       } else {
         toast.success("✅ Order completed successfully!", {
           description:
@@ -424,15 +479,8 @@ export default function CashierPage() {
               ? `Discount applied: −₱${previewDiscount.toFixed(2)}`
               : "Inventory has been automatically deducted.",
         });
+        await showReceiptForOrder(orderId);
       }
-
-      clearCart();
-      closeCheckoutModal();
-      setAmountTendered("");
-      setSelectedPaymentMethod("Cash");
-      setSelectedPromotionId(null);
-      setPreviewDiscount(0);
-      refetchOrders();
     } catch (error: any) {
       toast.error(
         error?.response?.data?.message || "Checkout failed. Please try again.",
@@ -1306,122 +1354,193 @@ export default function CashierPage() {
         <ModalShell
           open={showCheckoutModal}
           title={
-            settleOrderId
-              ? "Collect Payment (Open Tab)"
-              : checkoutOnlineOrderId
-                ? "Complete Online Order"
-                : "Complete Payment"
+            completedOrderId || receiptLoading
+              ? "Order Complete"
+              : settleOrderId
+                ? "Collect Payment (Open Tab)"
+                : checkoutOnlineOrderId
+                  ? "Complete Online Order"
+                  : "Complete Payment"
           }
           description={
-            settleOrderId
-              ? `Settling tab · ₱${finalTotal.toFixed(2)}`
-              : checkoutOnlineOrderId
-                ? `Online order · ${onlineOrderBeingCheckedOut?.customerName || ""}`
-                : `Order total: ₱${finalTotal.toFixed(2)}`
+            completedOrderId || receiptLoading
+              ? receiptData?.orderNumber
+                ? `Receipt · ${receiptData.orderNumber}`
+                : "Preparing receipt…"
+              : settleOrderId
+                ? `Settling tab · ₱${finalTotal.toFixed(2)}`
+                : checkoutOnlineOrderId
+                  ? `Online order · ${onlineOrderBeingCheckedOut?.customerName || ""}`
+                  : `Order total: ₱${finalTotal.toFixed(2)}`
           }
           onClose={closeCheckoutModal}
           className="max-w-md"
         >
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="text-5xl font-bold tracking-tight">
-                ₱{finalTotal.toFixed(2)}
+          {receiptLoading ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <p className="text-sm">Loading receipt…</p>
+            </div>
+          ) : completedOrderId && receiptData ? (
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-lg font-semibold text-emerald-600">
+                  Order completed!
+                </p>
+                <p className="font-mono text-sm text-muted-foreground">
+                  {receiptData.orderNumber}
+                </p>
               </div>
+
+              <div className="max-h-[360px] overflow-auto rounded-xl border border-border/60 bg-white">
+                <ReceiptPreview receipt={receiptData} />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  className="h-12 w-full"
+                  onClick={async () => {
+                    try {
+                      await ordersService.downloadReceiptPdf(
+                        completedOrderId,
+                        receiptData.orderNumber,
+                      );
+                      toast.success("PDF downloaded");
+                    } catch {
+                      toast.error("Failed to download PDF");
+                    }
+                  }}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download PDF
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="h-12 w-full"
+                  onClick={() => printReceipt()}
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print Receipt
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="h-11 w-full"
+                  onClick={() => finishWithoutReceipt()}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="text-5xl font-bold tracking-tight">
+                  ₱{finalTotal.toFixed(2)}
+                </div>
+                {!settleOrderId &&
+                  !checkoutOnlineOrderId &&
+                  previewDiscount > 0 && (
+                    <p className="mt-2 text-sm text-emerald-600">
+                      Includes −₱{previewDiscount.toFixed(2)} discount
+                    </p>
+                  )}
+              </div>
+
               {!settleOrderId &&
                 !checkoutOnlineOrderId &&
-                previewDiscount > 0 && (
-                  <p className="mt-2 text-sm text-emerald-600">
-                    Includes −₱{previewDiscount.toFixed(2)} discount
-                  </p>
+                selectedPaymentMethod === "PayLater" && (
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Customer Name <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      placeholder="Juan Dela Cruz"
+                      value={payLaterCustomerName}
+                      onChange={(e) => setPayLaterCustomerName(e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
                 )}
-            </div>
 
-            {!settleOrderId &&
-              !checkoutOnlineOrderId &&
-              selectedPaymentMethod === "PayLater" && (
+              <div className="space-y-3">
+                {(
+                  [
+                    "Cash",
+                    "GCash",
+                    "Maya",
+                    "Card",
+                    "PayLater",
+                  ] as PaymentMethod[]
+                ).map((method) => (
+                  <Button
+                    key={method}
+                    variant={
+                      selectedPaymentMethod === method ? "default" : "outline"
+                    }
+                    className="h-14 w-full justify-start text-base"
+                    onClick={() => setSelectedPaymentMethod(method)}
+                    disabled={!!settleOrderId && method === "PayLater"}
+                  >
+                    {method === "PayLater" ? "Pay Later (Open Tab)" : method}
+                  </Button>
+                ))}
+              </div>
+
+              {selectedPaymentMethod === "Cash" && (
                 <div>
                   <label className="mb-2 block text-sm font-medium">
-                    Customer Name <span className="text-red-500">*</span>
+                    Amount Tendered
                   </label>
                   <Input
-                    placeholder="Juan Dela Cruz"
-                    value={payLaterCustomerName}
-                    onChange={(e) => setPayLaterCustomerName(e.target.value)}
-                    className="rounded-xl"
+                    type="number"
+                    placeholder="0.00"
+                    value={amountTendered}
+                    onChange={(e) => setAmountTendered(e.target.value)}
+                    className="py-6 text-3xl"
                   />
+                  {changeDue > 0 && (
+                    <p className="mt-2 text-lg font-semibold text-emerald-600">
+                      Change: ₱{changeDue.toFixed(2)}
+                    </p>
+                  )}
                 </div>
               )}
 
-            <div className="space-y-3">
-              {(
-                ["Cash", "GCash", "Maya", "Card", "PayLater"] as PaymentMethod[]
-              ).map((method) => (
+              <div className="flex gap-3 pt-2">
                 <Button
-                  key={method}
-                  variant={
-                    selectedPaymentMethod === method ? "default" : "outline"
+                  onClick={handleCheckout}
+                  disabled={
+                    isCheckingOut ||
+                    (selectedPaymentMethod === "Cash" && !amountTendered) ||
+                    (!settleOrderId &&
+                      !checkoutOnlineOrderId &&
+                      selectedPaymentMethod === "PayLater" &&
+                      !payLaterCustomerName.trim())
                   }
-                  className="h-14 w-full justify-start text-base"
-                  onClick={() => setSelectedPaymentMethod(method)}
-                  disabled={!!settleOrderId && method === "PayLater"}
+                  className="flex-1 py-7 text-lg"
                 >
-                  {method === "PayLater" ? "Pay Later (Open Tab)" : method}
+                  {isCheckingOut && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {settleOrderId
+                    ? "Confirm Payment"
+                    : selectedPaymentMethod === "PayLater"
+                      ? "Place on Tab"
+                      : "Confirm Payment"}
                 </Button>
-              ))}
-            </div>
-
-            {selectedPaymentMethod === "Cash" && (
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Amount Tendered
-                </label>
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={amountTendered}
-                  onChange={(e) => setAmountTendered(e.target.value)}
-                  className="py-6 text-3xl"
-                />
-                {changeDue > 0 && (
-                  <p className="mt-2 text-lg font-semibold text-emerald-600">
-                    Change: ₱{changeDue.toFixed(2)}
-                  </p>
-                )}
+                <Button
+                  variant="outline"
+                  className="flex-1 py-7"
+                  onClick={closeCheckoutModal}
+                  disabled={isCheckingOut}
+                >
+                  Cancel
+                </Button>
               </div>
-            )}
-
-            <div className="flex gap-3 pt-2">
-              <Button
-                onClick={handleCheckout}
-                disabled={
-                  isCheckingOut ||
-                  (selectedPaymentMethod === "Cash" && !amountTendered) ||
-                  (!settleOrderId &&
-                    !checkoutOnlineOrderId &&
-                    selectedPaymentMethod === "PayLater" &&
-                    !payLaterCustomerName.trim())
-                }
-                className="flex-1 py-7 text-lg"
-              >
-                {isCheckingOut && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {settleOrderId
-                  ? "Confirm Payment"
-                  : selectedPaymentMethod === "PayLater"
-                    ? "Place on Tab"
-                    : "Confirm Payment"}
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1 py-7"
-                onClick={closeCheckoutModal}
-                disabled={isCheckingOut}
-              >
-                Cancel
-              </Button>
             </div>
-          </div>
+          )}
         </ModalShell>
       )}
     </div>
