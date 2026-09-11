@@ -254,3 +254,37 @@ export interface OnlineCartItem {
 }
 
 export type PaymentMethod = "Cash" | "GCash" | "Maya" | "Card" | "Other" | "PayLater";
+
+export interface OrderReceiptModifierDto {
+  name: string;
+  priceAdjustment: number;
+}
+
+export interface OrderReceiptItemDto {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  itemNotes?: string | null;
+  modifiers: OrderReceiptModifierDto[];
+}
+
+export interface OrderReceiptDto {
+  cafeName: string;
+  orderNumber: string;
+  createdAt: string;
+  completedAt?: string | null;
+  customerName?: string | null;
+  cashierName: string;
+  cashierEmployeeId?: string | null;
+  paymentMethod: string;
+  amountTendered?: number | null;
+  changeDue?: number | null;
+  subtotal: number;
+  discountAmount: number;
+  appliedPromotionName?: string | null;
+  tax: number;
+  total: number;
+  notes?: string | null;
+  items: OrderReceiptItemDto[];
+}
