@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -181,7 +180,9 @@ export default function CashierPage() {
           .flatMap((c) => Array(c.quantity).fill(c.itemTotal / c.quantity))
           .sort((a: number, b: number) => a - b);
         const freeCount = Math.floor(prices.length / 2);
-        return prices.slice(0, freeCount).reduce((s: number, p: number) => s + p, 0);
+        return prices
+          .slice(0, freeCount)
+          .reduce((s: number, p: number) => s + p, 0);
       }
       default:
         return 0;
@@ -241,7 +242,9 @@ export default function CashierPage() {
     setAddonGroups([]);
     setShowModifiersModal(true);
 
-    const embedded = (item as any).modifierGroups as ModifierGroup[] | undefined;
+    const embedded = (item as any).modifierGroups as
+      | ModifierGroup[]
+      | undefined;
     if (embedded && embedded.length > 0) {
       setAddonGroups(embedded);
       return;
@@ -467,8 +470,7 @@ export default function CashierPage() {
       if (selectedPaymentMethod === "PayLater") {
         // Still Pending – no receipt yet
         toast.success("Order placed on tab (Pay Later)", {
-          description:
-            "You can collect payment later from the Open Tabs tab.",
+          description: "You can collect payment later from the Open Tabs tab.",
         });
         fetchOpenTabs();
         finishWithoutReceipt();
@@ -588,101 +590,104 @@ export default function CashierPage() {
               </div>
             ) : (
               <>
-              <div className="space-y-4">
-                {tabsPage.paginated.map((order) => {
-                  const items = order.items || (order as any).orderItems || [];
-                  const displayName =
-                    order.customerName?.trim() ||
-                    order.cashierName?.trim() ||
-                    "Walk-in";
+                <div className="space-y-4">
+                  {tabsPage.paginated.map((order) => {
+                    const items =
+                      order.items || (order as any).orderItems || [];
+                    const displayName =
+                      order.customerName?.trim() ||
+                      order.cashierName?.trim() ||
+                      "Walk-in";
 
-                  return (
-                    <div
-                      key={order.id}
-                      className="rounded-2xl border border-border/60 bg-zinc-50 p-5 dark:bg-zinc-950/50"
-                    >
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-mono font-semibold">
-                              {order.orderNumber || `#${order.id}`}
+                    return (
+                      <div
+                        key={order.id}
+                        className="rounded-2xl border border-border/60 bg-zinc-50 p-5 dark:bg-zinc-950/50"
+                      >
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-mono font-semibold">
+                                {order.orderNumber || `#${order.id}`}
+                              </p>
+                              <BadgePill tone="warning">Pay Later</BadgePill>
+                            </div>
+                            <p className="mt-2 text-sm font-medium">
+                              Customer:{" "}
+                              <span className="text-amber-700 dark:text-amber-400">
+                                {displayName}
+                              </span>
                             </p>
-                            <BadgePill tone="warning">Pay Later</BadgePill>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {new Date(
+                                order.createdAt?.endsWith?.("Z")
+                                  ? order.createdAt
+                                  : order.createdAt + "Z",
+                              ).toLocaleString([], {
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                            <ul className="mt-3 space-y-1">
+                              {items.length === 0 ? (
+                                <li className="text-sm text-muted-foreground">
+                                  No items
+                                </li>
+                              ) : (
+                                items
+                                  .slice(0, 5)
+                                  .map((item: any, idx: number) => {
+                                    const name =
+                                      item.menuItemName ||
+                                      item.menuItem?.name ||
+                                      item.name ||
+                                      "Item";
+                                    return (
+                                      <li
+                                        key={idx}
+                                        className="text-sm text-muted-foreground"
+                                      >
+                                        {item.quantity}× {name}
+                                      </li>
+                                    );
+                                  })
+                              )}
+                              {items.length > 5 && (
+                                <li className="text-xs text-muted-foreground">
+                                  +{items.length - 5} more…
+                                </li>
+                              )}
+                            </ul>
                           </div>
-                          <p className="mt-2 text-sm font-medium">
-                            Customer:{" "}
-                            <span className="text-amber-700 dark:text-amber-400">
-                              {displayName}
-                            </span>
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {new Date(
-                              order.createdAt?.endsWith?.("Z")
-                                ? order.createdAt
-                                : order.createdAt + "Z",
-                            ).toLocaleString([], {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                          <ul className="mt-3 space-y-1">
-                            {items.length === 0 ? (
-                              <li className="text-sm text-muted-foreground">
-                                No items
-                              </li>
-                            ) : (
-                              items.slice(0, 5).map((item: any, idx: number) => {
-                                const name =
-                                  item.menuItemName ||
-                                  item.menuItem?.name ||
-                                  item.name ||
-                                  "Item";
-                                return (
-                                  <li
-                                    key={idx}
-                                    className="text-sm text-muted-foreground"
-                                  >
-                                    {item.quantity}× {name}
-                                  </li>
-                                );
-                              })
-                            )}
-                            {items.length > 5 && (
-                              <li className="text-xs text-muted-foreground">
-                                +{items.length - 5} more…
-                              </li>
-                            )}
-                          </ul>
-                        </div>
-                        <div className="flex flex-col items-end gap-3 sm:shrink-0">
-                          <p className="text-xl font-bold">
-                            ₱{(order.total || 0).toFixed(2)}
-                          </p>
-                          <Button
-                            className="rounded-2xl"
-                            onClick={() => openSettleCheckout(order)}
-                          >
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            Collect Payment
-                          </Button>
+                          <div className="flex flex-col items-end gap-3 sm:shrink-0">
+                            <p className="text-xl font-bold">
+                              ₱{(order.total || 0).toFixed(2)}
+                            </p>
+                            <Button
+                              className="rounded-2xl"
+                              onClick={() => openSettleCheckout(order)}
+                            >
+                              <CreditCard className="mr-2 h-4 w-4" />
+                              Collect Payment
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <Pagination
-                page={tabsPage.page}
-                totalPages={tabsPage.totalPages}
-                total={tabsPage.total}
-                from={tabsPage.from}
-                to={tabsPage.to}
-                onPageChange={tabsPage.setPage}
-                pageSize={tabsPage.pageSize}
-                onPageSizeChange={tabsPage.setPageSize}
-              />
+                    );
+                  })}
+                </div>
+                <Pagination
+                  page={tabsPage.page}
+                  totalPages={tabsPage.totalPages}
+                  total={tabsPage.total}
+                  from={tabsPage.from}
+                  to={tabsPage.to}
+                  onPageChange={tabsPage.setPage}
+                  pageSize={tabsPage.pageSize}
+                  onPageSizeChange={tabsPage.setPageSize}
+                />
               </>
             )}
           </CardContent>
@@ -722,169 +727,214 @@ export default function CashierPage() {
               </div>
             ) : (
               <>
-              <div className="space-y-4">
-                {onlinePage.paginated.map((order) => {
-                  const items = order.items || order.orderItems || [];
-                  const isExpanded = expandedOnlineOrderId === order.id;
+                <div className="space-y-4">
+                  {onlinePage.paginated.map((order) => {
+                    const items = order.items || order.orderItems || [];
+                    const isExpanded = expandedOnlineOrderId === order.id;
 
-                  return (
-                    <div
-                      key={order.id}
-                      className="rounded-2xl border border-border/60 bg-zinc-50 p-5 transition-colors dark:bg-zinc-950/50"
-                    >
-                      <button
-                        type="button"
-                        className="flex w-full flex-col gap-4 text-left sm:flex-row sm:items-start sm:justify-between"
-                        onClick={() =>
-                          setExpandedOnlineOrderId(isExpanded ? null : order.id)
-                        }
+                    return (
+                      <div
+                        key={order.id}
+                        className="rounded-2xl border border-border/60 bg-zinc-50 p-5 transition-colors dark:bg-zinc-950/50"
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-mono font-semibold">
-                              {order.orderNumber || `#${order.id}`}
-                            </p>
-                            <BadgePill
-                              tone={
-                                order.status === "Completed"
-                                  ? "success"
-                                  : order.status === "Pending"
-                                    ? "warning"
-                                    : "neutral"
-                              }
-                            >
-                              {order.status}
-                            </BadgePill>
-                            <span className="text-xs text-muted-foreground">
-                              {isExpanded ? "Hide details ▲" : "View details ▼"}
-                            </span>
-                          </div>
-                          <p className="mt-2 text-sm font-medium">
-                            Customer:{" "}
-                            <span className="text-amber-700 dark:text-amber-400">
-                              {order.customerName || "—"}
-                            </span>
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {new Date(
-                              order.createdAt?.endsWith?.("Z")
-                                ? order.createdAt
-                                : order.createdAt + "Z",
-                            ).toLocaleString([], {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end gap-3 sm:shrink-0">
-                          <p className="text-xl font-bold">
-                            ₱{(order.total || 0).toFixed(2)}
-                          </p>
-                        </div>
-                      </button>
-
-                      {isExpanded && (
-                        <div className="mt-4 border-t border-border/50 pt-4">
-                          <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                            Order items
-                          </p>
-                          {items.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">
-                              No item details available.
-                            </p>
-                          ) : (
-                            <ul className="space-y-2">
-                              {items.map((item: any, idx: number) => (
-                                <li
-                                  key={idx}
-                                  className="flex items-start justify-between gap-3 rounded-xl bg-white/80 px-3 py-2.5 dark:bg-zinc-900/60"
-                                >
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium">
-                                      {item.quantity}×{" "}
-                                      {item.menuItemName ||
-                                        item.menuItem?.name ||
-                                        "Item"}
-                                    </p>
-                                    {item.itemNotes && (
-                                      <p className="mt-0.5 text-xs text-muted-foreground">
-                                        Note: {item.itemNotes}
-                                      </p>
-                                    )}
-                                    {(item.selectedModifiers || []).length >
-                                      0 && (
-                                      <p className="mt-0.5 text-xs text-muted-foreground">
-                                        {(item.selectedModifiers || [])
-                                          .map(
-                                            (m: any) =>
-                                              m.name || m.modifierOptionName,
-                                          )
-                                          .join(", ")}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <p className="shrink-0 text-sm font-semibold text-amber-600">
-                                    ₱
-                                    {(
-                                      item.subtotal ??
-                                      (item.unitPrice || 0) *
-                                        (item.quantity || 1)
-                                    ).toFixed(2)}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          {order.customerNotes && (
-                            <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                              <span className="font-medium">Customer note:</span>{" "}
-                              {order.customerNotes}
-                            </p>
-                          )}
-                          {order.status === "Pending" && (
-                            <div className="mt-4 flex justify-end">
-                              <Button
-                                className="rounded-2xl"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openOnlineCheckout(order);
-                                }}
+                        <button
+                          type="button"
+                          className="flex w-full flex-col gap-4 text-left sm:flex-row sm:items-start sm:justify-between"
+                          onClick={() =>
+                            setExpandedOnlineOrderId(
+                              isExpanded ? null : order.id,
+                            )
+                          }
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-mono font-semibold">
+                                {order.orderNumber || `#${order.id}`}
+                              </p>
+                              <BadgePill
+                                tone={
+                                  order.status === "Completed"
+                                    ? "success"
+                                    : order.status === "Pending"
+                                      ? "warning"
+                                      : "neutral"
+                                }
                               >
-                                <CreditCard className="mr-2 h-4 w-4" />
-                                Checkout
-                              </Button>
+                                {order.status}
+                              </BadgePill>
+                              <span className="text-xs text-muted-foreground">
+                                {isExpanded
+                                  ? "Hide details ▲"
+                                  : "View details ▼"}
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      )}
+                            <p className="mt-2 text-sm font-medium">
+                              Customer:{" "}
+                              <span className="text-amber-700 dark:text-amber-400">
+                                {order.customerName || "—"}
+                              </span>
+                            </p>
+                            {(order.estimatedReadyAt ||
+                              order.preferredPickupAt) && (
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {order.estimatedReadyAt && (
+                                  <>
+                                    ETA ~{" "}
+                                    {new Date(
+                                      order.estimatedReadyAt.endsWith?.("Z")
+                                        ? order.estimatedReadyAt
+                                        : order.estimatedReadyAt + "Z",
+                                    ).toLocaleTimeString([], {
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                    })}
+                                  </>
+                                )}
+                                {order.estimatedReadyAt &&
+                                  order.preferredPickupAt &&
+                                  " · "}
+                                {order.preferredPickupAt && (
+                                  <>
+                                    Pickup{" "}
+                                    {new Date(
+                                      order.preferredPickupAt.endsWith?.("Z")
+                                        ? order.preferredPickupAt
+                                        : order.preferredPickupAt + "Z",
+                                    ).toLocaleTimeString([], {
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                    })}
+                                  </>
+                                )}
+                              </p>
+                            )}
+                            {(order.customerPhone || order.phoneNumber) && (
+                              <p className="mt-0.5 text-xs text-muted-foreground">
+                                📱 {order.customerPhone || order.phoneNumber}
+                              </p>
+                            )}
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {new Date(
+                                order.createdAt?.endsWith?.("Z")
+                                  ? order.createdAt
+                                  : order.createdAt + "Z",
+                              ).toLocaleString([], {
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-3 sm:shrink-0">
+                            <p className="text-xl font-bold">
+                              ₱{(order.total || 0).toFixed(2)}
+                            </p>
+                          </div>
+                        </button>
 
-                      {!isExpanded && order.status === "Pending" && (
-                        <div className="mt-4 flex justify-end">
-                          <Button
-                            className="rounded-2xl"
-                            onClick={() => openOnlineCheckout(order)}
-                          >
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            Checkout
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <Pagination
-                page={onlinePage.page}
-                totalPages={onlinePage.totalPages}
-                total={onlinePage.total}
-                from={onlinePage.from}
-                to={onlinePage.to}
-                onPageChange={onlinePage.setPage}
-                pageSize={onlinePage.pageSize}
-                onPageSizeChange={onlinePage.setPageSize}
-              />
+                        {isExpanded && (
+                          <div className="mt-4 border-t border-border/50 pt-4">
+                            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                              Order items
+                            </p>
+                            {items.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                No item details available.
+                              </p>
+                            ) : (
+                              <ul className="space-y-2">
+                                {items.map((item: any, idx: number) => (
+                                  <li
+                                    key={idx}
+                                    className="flex items-start justify-between gap-3 rounded-xl bg-white/80 px-3 py-2.5 dark:bg-zinc-900/60"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium">
+                                        {item.quantity}×{" "}
+                                        {item.menuItemName ||
+                                          item.menuItem?.name ||
+                                          "Item"}
+                                      </p>
+                                      {item.itemNotes && (
+                                        <p className="mt-0.5 text-xs text-muted-foreground">
+                                          Note: {item.itemNotes}
+                                        </p>
+                                      )}
+                                      {(item.selectedModifiers || []).length >
+                                        0 && (
+                                        <p className="mt-0.5 text-xs text-muted-foreground">
+                                          {(item.selectedModifiers || [])
+                                            .map(
+                                              (m: any) =>
+                                                m.name || m.modifierOptionName,
+                                            )
+                                            .join(", ")}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <p className="shrink-0 text-sm font-semibold text-amber-600">
+                                      ₱
+                                      {(
+                                        item.subtotal ??
+                                        (item.unitPrice || 0) *
+                                          (item.quantity || 1)
+                                      ).toFixed(2)}
+                                    </p>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {order.customerNotes && (
+                              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                                <span className="font-medium">
+                                  Customer note:
+                                </span>{" "}
+                                {order.customerNotes}
+                              </p>
+                            )}
+                            {order.status === "Pending" && (
+                              <div className="mt-4 flex justify-end">
+                                <Button
+                                  className="rounded-2xl"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openOnlineCheckout(order);
+                                  }}
+                                >
+                                  <CreditCard className="mr-2 h-4 w-4" />
+                                  Checkout
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {!isExpanded && order.status === "Pending" && (
+                          <div className="mt-4 flex justify-end">
+                            <Button
+                              className="rounded-2xl"
+                              onClick={() => openOnlineCheckout(order)}
+                            >
+                              <CreditCard className="mr-2 h-4 w-4" />
+                              Checkout
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <Pagination
+                  page={onlinePage.page}
+                  totalPages={onlinePage.totalPages}
+                  total={onlinePage.total}
+                  from={onlinePage.from}
+                  to={onlinePage.to}
+                  onPageChange={onlinePage.setPage}
+                  pageSize={onlinePage.pageSize}
+                  onPageSizeChange={onlinePage.setPageSize}
+                />
               </>
             )}
           </CardContent>

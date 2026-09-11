@@ -5,7 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { AddonPicker } from "@/components/addons/AddonPicker";
 import { menuService } from "@/services/menu.service";
-import { ordersService } from "@/services/orders.service";
+import {
+  ordersService,
+  type PickupSlotsResponse,
+} from "@/services/orders.service";
 import { getFullImageUrl } from "@/lib/imageUtils";
 import { toast } from "sonner";
 import {
@@ -16,6 +19,8 @@ import {
   X,
   Search,
   Coffee,
+  Clock,
+  Loader2,
 } from "lucide-react";
 import type { MenuItem } from "@/types";
 import type { ModifierGroup } from "@/types/addons";
@@ -29,7 +34,6 @@ interface OnlineCartItem {
 }
 
 type OnlineOrderSectionProps = {
-  /** Category to pre-select when parent sets it (e.g. landing category chip). */
   selectedCategory?: string | null;
   onCategoryApplied?: () => void;
 };
@@ -68,6 +72,11 @@ function optionLabelsFromIds(
   return labels;
 }
 
+function formatSlot(iso: string) {
+  const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 export function OnlineOrderSection({
   selectedCategory = null,
   onCategoryApplied,
@@ -79,10 +88,18 @@ export function OnlineOrderSection({
   const [customerName, setCustomerName] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [addonItem, setAddonItem] = useState<MenuItem | null>(null);
+
+  // Pickup / ETA
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [pickupInfo, setPickupInfo] = useState<PickupSlotsResponse | null>(
+    null,
+  );
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   useEffect(() => {
     const loadMenu = () => {
@@ -103,7 +120,6 @@ export function OnlineOrderSection({
     };
   }, []);
 
-  // Parent (LandingPage) can push a category into this section
   useEffect(() => {
     if (selectedCategory === undefined || selectedCategory === null) return;
     if (selectedCategory === "" || selectedCategory === "All") {
@@ -114,6 +130,55 @@ export function OnlineOrderSection({
     setSearch("");
     onCategoryApplied?.();
   }, [selectedCategory, onCategoryApplied]);
+
+  const cartTotals = useMemo(() => {
+    const quantity = cart.reduce((s, c) => s + c.quantity, 0);
+    const modifiers = cart.reduce(
+      (s, c) => s + (c.selectedModifierOptionIds?.length ?? 0),
+      0,
+    );
+    const total = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
+    return { quantity, modifiers, total };
+  }, [cart]);
+
+  // Load ETA + slots when cart changes and cart panel is open
+  useEffect(() => {
+    if (!showCart || cart.length === 0) {
+      setPickupInfo(null);
+      setSelectedSlot(null);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setSlotsLoading(true);
+        const res = await ordersService.getPickupSlots(
+          Math.max(1, cartTotals.quantity),
+          cartTotals.modifiers,
+        );
+        if (cancelled) return;
+        setPickupInfo(res.data);
+        // Keep selection if still valid; else pick first slot
+        setSelectedSlot((prev) => {
+          if (prev && res.data.slots.includes(prev)) return prev;
+          return res.data.slots[0] ?? null;
+        });
+      } catch {
+        if (!cancelled) {
+          setPickupInfo(null);
+          setSelectedSlot(null);
+        }
+      } finally {
+        if (!cancelled) setSlotsLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [showCart, cartTotals.quantity, cartTotals.modifiers, cart.length]);
 
   const activeItems = useMemo(
     () => menuItems.filter((item) => item.isActive !== false),
@@ -133,46 +198,32 @@ export function OnlineOrderSection({
     let list = activeItems;
 
     if (activeCategory !== "All") {
-      list = list.filter((item) => item.categoryName === activeCategory);
+      list = list.filter(
+        (item) =>
+          item.categoryName?.trim().toLowerCase() ===
+          activeCategory.toLowerCase(),
+      );
     }
+
     if (term) {
       list = list.filter(
         (item) =>
           item.name.toLowerCase().includes(term) ||
-          item.categoryName?.toLowerCase().includes(term) ||
           item.description?.toLowerCase().includes(term),
       );
     }
-
-    return [...list].sort(
-      (a, b) =>
-        a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
-    );
+    return list;
   }, [activeItems, activeCategory, search]);
 
-  // Grouped view when "All" is selected
-  const grouped = useMemo(() => {
-    if (activeCategory !== "All") return null;
-    const map = new Map<string, MenuItem[]>();
-    for (const item of filtered) {
-      const key = item.categoryName || "Other";
-      const arr = map.get(key) ?? [];
-      arr.push(item);
-      map.set(key, arr);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered, activeCategory]);
+  const cartTotal = cartTotals.total;
 
-  const cartCount = cart.reduce((s, c) => s + c.quantity, 0);
-  const cartTotal = cart.reduce((s, c) => s + c.unitPrice * c.quantity, 0);
-
-  const handleAddClick = (item: MenuItem) => {
+  const handleItemClick = (item: MenuItem) => {
     const groups = resolveModifierGroups(item);
     if (groups.length > 0) {
       setAddonItem(item);
-    } else {
-      addToCart(item, [], Number(item.price), []);
+      return;
     }
+    addToCart(item, [], Number(item.price), []);
   };
 
   const addToCart = (
@@ -182,16 +233,16 @@ export function OnlineOrderSection({
     selectedOptionLabels: string[],
   ) => {
     setCart((prev) => {
-      const key = (ids: number[]) => [...ids].sort((a, b) => a - b).join(",");
-      const existing = prev.find(
+      const idx = prev.findIndex(
         (c) =>
           c.menuItem.id === item.id &&
-          key(c.selectedModifierOptionIds) === key(selectedModifierOptionIds),
+          JSON.stringify(c.selectedModifierOptionIds) ===
+            JSON.stringify(selectedModifierOptionIds),
       );
-      if (existing) {
-        return prev.map((c) =>
-          c === existing ? { ...c, quantity: c.quantity + 1 } : c,
-        );
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+        return next;
       }
       return [
         ...prev,
@@ -234,10 +285,14 @@ export function OnlineOrderSection({
 
     try {
       setSubmitting(true);
-      await ordersService.createOnlineOrder({
+      const res = await ordersService.createOnlineOrder({
         customerName: customerName.trim(),
         customerNotes: customerNotes.trim() || undefined,
         phoneNumber: phoneNumber.trim() || undefined,
+        customerEmail: customerEmail.trim() || undefined,
+        preferredPickupAt: selectedSlot || undefined,
+        notifySms: !!phoneNumber.trim(),
+        notifyEmail: !!customerEmail.trim(),
         items: cart.map((c) => ({
           menuItemId: c.menuItem.id,
           quantity: c.quantity,
@@ -245,14 +300,34 @@ export function OnlineOrderSection({
         })),
       });
 
+      const order = res.data as any;
+      const eta = order?.estimatedReadyAt
+        ? formatSlot(order.estimatedReadyAt)
+        : pickupInfo
+          ? formatSlot(pickupInfo.estimatedReadyAt)
+          : null;
+      const slot = selectedSlot ? formatSlot(selectedSlot) : null;
+
       toast.success("Order placed successfully!", {
-        description: "We'll prepare it shortly. See you at the café!",
+        description: [
+          order?.orderNumber ? `Order ${order.orderNumber}` : null,
+          eta ? `Ready ~${eta}` : null,
+          slot ? `Pickup ${slot}` : null,
+          phoneNumber.trim() || customerEmail.trim()
+            ? "We'll notify you when it's ready."
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       });
 
       setCart([]);
       setCustomerName("");
       setCustomerNotes("");
       setPhoneNumber("");
+      setCustomerEmail("");
+      setSelectedSlot(null);
+      setPickupInfo(null);
       setShowCart(false);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to place order");
@@ -278,269 +353,240 @@ export function OnlineOrderSection({
               src={imageSrc}
               alt={item.name}
               className="h-full w-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-zinc-400">
+            <div className="flex h-full items-center justify-center text-muted-foreground">
               <Coffee className="h-10 w-10 opacity-40" />
             </div>
           )}
-          {hasAddons && (
-            <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-amber-700 shadow-sm">
-              Add-ons available
-            </span>
-          )}
         </div>
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="font-heading text-lg font-semibold tracking-tight">
-                {item.name}
-              </h3>
-              {item.categoryName && (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {item.categoryName}
-                </p>
-              )}
-              {item.description && (
-                <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
-                  {item.description}
-                </p>
-              )}
-            </div>
-            <p className="shrink-0 text-lg font-bold text-amber-700 dark:text-amber-400">
-              ₱{Number(item.price).toFixed(2)}
-            </p>
+        <CardContent className="space-y-3 p-4">
+          <div>
+            <h3 className="font-semibold leading-tight">{item.name}</h3>
+            {item.description && (
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                {item.description}
+              </p>
+            )}
           </div>
-          <Button
-            className="mt-4 w-full rounded-2xl"
-            onClick={() => handleAddClick(item)}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {hasAddons ? "Choose add-ons" : "Add to cart"}
-          </Button>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-lg font-bold text-amber-600">
+              ₱{Number(item.price).toFixed(2)}
+            </span>
+            <Button
+              size="sm"
+              className="rounded-xl"
+              onClick={() => handleItemClick(item)}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              {hasAddons ? "Customize" : "Add"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
   };
 
   return (
-    <section
-      id="order"
-      className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8"
-    >
-      {/* Header + cart */}
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <section className="relative">
+      {/* Header + search */}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-amber-700 dark:text-amber-400">
-            Order online
-          </p>
-          <h2 className="mt-2 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-            Browse by category & order
+          <h2 className="font-heading text-3xl font-semibold tracking-tight">
+            Order Online
           </h2>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Pick a category, choose your item, customize add-ons, and checkout —
-            all in one place.
+          <p className="mt-1 text-muted-foreground">
+            Browse the menu, pick a pickup time, and we’ll text or email you
+            when it’s ready — all in one place.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search menu..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="rounded-2xl pl-9"
+            />
+          </div>
+          <Button
+            variant="outline"
+            className="relative rounded-2xl"
+            onClick={() => setShowCart(true)}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            {cart.length > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+                {cart.reduce((s, c) => s + c.quantity, 0)}
+              </span>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Categories */}
+      <div className="mb-6 flex flex-wrap gap-2">
         <Button
-          variant="outline"
-          className="relative shrink-0 rounded-2xl"
-          onClick={() => setShowCart(true)}
-        >
-          <ShoppingBag className="mr-2 h-4 w-4" />
-          Cart
-          {cartCount > 0 && (
-            <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[11px] font-bold text-white">
-              {cartCount}
-            </span>
-          )}
-        </Button>
-      </div>
-
-      {/* Search */}
-      <div className="relative mb-4 max-w-md">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search menu..."
-          className="rounded-2xl pl-11"
-        />
-      </div>
-
-      {/* Category chips */}
-      <div className="mb-8 flex flex-wrap gap-2">
-        <button
-          type="button"
+          size="sm"
+          variant={activeCategory === "All" ? "default" : "outline"}
+          className="rounded-full"
           onClick={() => setActiveCategory("All")}
-          className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-            activeCategory === "All"
-              ? "bg-amber-500 text-white shadow-sm"
-              : "border border-zinc-200 bg-white/80 text-zinc-800 hover:border-amber-300 hover:bg-amber-50 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
-          }`}
         >
           All
-          <span className="ml-1.5 opacity-80">{activeItems.length}</span>
-        </button>
-        {categories.map((cat) => {
-          const count = activeItems.filter((i) => i.categoryName === cat).length;
-          const selected = activeCategory === cat;
-          return (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setActiveCategory(cat)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                selected
-                  ? "bg-amber-500 text-white shadow-sm"
-                  : "border border-zinc-200 bg-white/80 text-zinc-800 hover:border-amber-300 hover:bg-amber-50 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-100"
-              }`}
-            >
-              {cat}
-              <span className="ml-1.5 opacity-80">{count}</span>
-            </button>
-          );
-        })}
+        </Button>
+        {categories.map((cat) => (
+          <Button
+            key={cat}
+            size="sm"
+            variant={activeCategory === cat ? "default" : "outline"}
+            className="rounded-full"
+            onClick={() => setActiveCategory(cat)}
+          >
+            {cat}
+          </Button>
+        ))}
       </div>
 
       {/* Menu grid */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div
-              key={i}
-              className="h-72 animate-pulse rounded-3xl bg-zinc-100 dark:bg-zinc-800"
-            />
-          ))}
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
-          No menu items
-          {activeCategory !== "All" ? ` in “${activeCategory}”` : ""} match your
-          search.
-        </div>
-      ) : activeCategory === "All" && grouped ? (
-        <div className="space-y-10">
-          {grouped.map(([category, items]) => (
-            <div key={category}>
-              <div className="mb-4 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveCategory(category)}
-                  className="font-heading text-xl font-semibold tracking-tight hover:text-amber-700 dark:hover:text-amber-400"
-                >
-                  {category}
-                </button>
-                <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                  {items.length}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map(renderMenuCard)}
-              </div>
-            </div>
-          ))}
+        <div className="rounded-3xl border border-dashed border-border/70 py-16 text-center text-muted-foreground">
+          No items found.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map(renderMenuCard)}
         </div>
       )}
 
-      {/* Cart drawer */}
+      {/* Cart drawer / panel */}
       {showCart && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setShowCart(false)}
-          />
-          <div className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl dark:bg-zinc-950">
-            <div className="flex items-center justify-between border-b border-border/60 p-5">
-              <div>
-                <h3 className="font-heading text-xl font-semibold">Your cart</h3>
-                <p className="text-sm text-muted-foreground">
-                  {cartCount} item{cartCount !== 1 ? "s" : ""}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-xl"
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
+          <div className="flex h-full w-full max-w-md flex-col bg-background shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
+              <h3 className="text-lg font-semibold">Your order</h3>
+              <button
+                type="button"
                 onClick={() => setShowCart(false)}
+                className="rounded-xl p-2 hover:bg-muted"
               >
                 <X className="h-5 w-5" />
-              </Button>
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 space-y-4 overflow-y-auto p-5">
               {cart.length === 0 ? (
-                <div className="py-16 text-center text-muted-foreground">
-                  <ShoppingBag className="mx-auto mb-3 h-10 w-10 opacity-40" />
-                  <p>Your cart is empty</p>
-                </div>
+                <p className="py-10 text-center text-muted-foreground">
+                  Cart is empty. Add items from the menu.
+                </p>
               ) : (
-                <ul className="space-y-4">
-                  {cart.map((c, index) => (
-                    <li
-                      key={`${c.menuItem.id}-${index}`}
-                      className="rounded-2xl border border-border/60 p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-medium">{c.menuItem.name}</p>
-                          {c.selectedOptionLabels.length > 0 && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {c.selectedOptionLabels.join(", ")}
-                            </p>
-                          )}
-                          <p className="mt-1 text-sm font-semibold text-amber-700 dark:text-amber-400">
-                            ₱{(c.unitPrice * c.quantity).toFixed(2)}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="shrink-0 text-red-500"
-                          onClick={() => removeFromCart(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 rounded-xl"
-                          onClick={() => updateQty(index, c.quantity - 1)}
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </Button>
-                        <span className="w-8 text-center text-sm font-medium">
-                          {c.quantity}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 rounded-xl"
-                          onClick={() => updateQty(index, c.quantity + 1)}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                cart.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-start justify-between gap-3 rounded-2xl border border-border/60 p-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium leading-tight">
+                        {item.menuItem.name}
+                      </p>
+                      {item.selectedOptionLabels?.length > 0 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {item.selectedOptionLabels.join(", ")}
+                        </p>
+                      )}
+                      <p className="mt-1 text-sm font-semibold text-amber-600">
+                        ₱{(item.unitPrice * item.quantity).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-xl"
+                        onClick={() => updateQty(idx, item.quantity - 1)}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </Button>
+                      <span className="w-7 text-center text-sm font-semibold">
+                        {item.quantity}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-xl"
+                        onClick={() => updateQty(idx, item.quantity + 1)}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => removeFromCart(idx)}
+                        className="ml-1 rounded-xl p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
 
             {cart.length > 0 && (
               <div className="space-y-3 border-t border-border/60 p-5">
+                {/* ETA + slots */}
+                <div className="rounded-2xl border border-border/60 bg-muted/30 p-3">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <Clock className="h-4 w-4 text-amber-600" />
+                    Pickup time
+                  </div>
+                  {slotsLoading ? (
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Estimating ready time…
+                    </div>
+                  ) : pickupInfo ? (
+                    <>
+                      <p className="mb-2 text-sm text-muted-foreground">
+                        Estimated ready ~{" "}
+                        <span className="font-semibold text-foreground">
+                          {formatSlot(pickupInfo.estimatedReadyAt)}
+                        </span>{" "}
+                        ({pickupInfo.estimatedMinutes} min)
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {pickupInfo.slots.map((slot) => {
+                          const active = selectedSlot === slot;
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              onClick={() => setSelectedSlot(slot)}
+                              className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                                active
+                                  ? "border-amber-500 bg-amber-500 text-white"
+                                  : "border-border/70 bg-background hover:border-amber-400"
+                              }`}
+                            >
+                              {formatSlot(slot)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Couldn’t load pickup times. You can still place the order.
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">
-                    Your name <span className="text-red-500">*</span>
+                    Name <span className="text-red-500">*</span>
                   </label>
                   <Input
                     placeholder="Juan Dela Cruz"
@@ -551,12 +597,24 @@ export function OnlineOrderSection({
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">
-                    Phone (optional)
+                    Phone (for SMS updates)
                   </label>
                   <Input
                     placeholder="09XX XXX XXXX"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    Email (for email updates)
+                  </label>
+                  <Input
+                    type="email"
+                    placeholder="you@email.com"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
                     className="rounded-xl"
                   />
                 </div>
@@ -571,6 +629,16 @@ export function OnlineOrderSection({
                     className="rounded-xl"
                   />
                 </div>
+
+                {(phoneNumber.trim() || customerEmail.trim()) && (
+                  <p className="text-xs text-muted-foreground">
+                    We’ll notify you by{" "}
+                    {[phoneNumber.trim() && "SMS", customerEmail.trim() && "email"]
+                      .filter(Boolean)
+                      .join(" and ")}{" "}
+                    when your order is ready.
+                  </p>
+                )}
 
                 <div className="flex items-center justify-between pt-1 text-xl font-bold">
                   <span>Total</span>
