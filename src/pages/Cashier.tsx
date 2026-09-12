@@ -893,8 +893,64 @@ export default function CashierPage() {
                                 {order.customerNotes}
                               </p>
                             )}
-                            {order.status === "Pending" && (
-                              <div className="mt-4 flex justify-end">
+                            {/* ===== Status action buttons ===== */}
+                            <div className="mt-4 flex flex-wrap justify-end gap-2">
+                              {/* Prepare Order → Preparing */}
+                              {order.status === "Pending" && (
+                                <Button
+                                  variant="outline"
+                                  className="rounded-2xl"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await ordersService.updateStatus(
+                                        order.id,
+                                        "Preparing",
+                                      );
+                                      toast.success(
+                                        "Order marked as Preparing – customer notified via SMS",
+                                      );
+                                      fetchOnlineOrders();
+                                    } catch {
+                                      toast.error(
+                                        "Failed to mark as Preparing",
+                                      );
+                                    }
+                                  }}
+                                >
+                                  Prepare Order
+                                </Button>
+                              )}
+
+                              {/* Ready for Pickup → Ready */}
+                              {order.status === "Preparing" && (
+                                <Button
+                                  variant="outline"
+                                  className="rounded-2xl"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await ordersService.updateStatus(
+                                        order.id,
+                                        "Ready",
+                                      );
+                                      toast.success(
+                                        "Order marked as Ready – customer notified via SMS",
+                                      );
+                                      fetchOnlineOrders();
+                                    } catch {
+                                      toast.error("Failed to mark as Ready");
+                                    }
+                                  }}
+                                >
+                                  Ready for Pickup
+                                </Button>
+                              )}
+
+                              {/* Checkout – available until the order is Completed */}
+                              {(order.status === "Pending" ||
+                                order.status === "Preparing" ||
+                                order.status === "Ready") && (
                                 <Button
                                   className="rounded-2xl"
                                   onClick={(e) => {
@@ -905,8 +961,8 @@ export default function CashierPage() {
                                   <CreditCard className="mr-2 h-4 w-4" />
                                   Checkout
                                 </Button>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         )}
 

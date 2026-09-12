@@ -77,4 +77,9 @@ export const ordersService = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
+  
+  updateStatus: (id: number, status: string) =>
+  api.put(`/orders/${id}/status`, JSON.stringify(status), {
+    headers: { "Content-Type": "application/json" },
+  }),
 };
