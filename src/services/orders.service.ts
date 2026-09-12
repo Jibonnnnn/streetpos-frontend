@@ -1,6 +1,28 @@
 import type { OrderResponse, OrderReceiptDto } from "@/types";
 import api from "./api";
 
+export type PickupSlotsResponse = {
+  estimatedReadyAt: string;
+  estimatedMinutes: number;
+  slots: string[];
+};
+
+export type CreateOnlineOrderPayload = {
+  customerName: string;
+  customerNotes?: string;
+  phoneNumber?: string;
+  customerEmail?: string;
+  preferredPickupAt?: string;
+  notifySms?: boolean;
+  notifyEmail?: boolean;
+  items: {
+    menuItemId: number;
+    quantity: number;
+    itemNotes?: string;
+    selectedModifierOptionIds?: number[];
+  }[];
+};
+
 export const ordersService = {
   getMyOrders: async () => {
     return api.get("/orders/my-orders");
@@ -14,17 +36,13 @@ export const ordersService = {
     return api.post("/orders/checkout", payload);
   },
 
-  createOnlineOrder: (data: {
-    customerName: string;
-    customerNotes?: string;
-    phoneNumber?: string;
-    items: {
-      menuItemId: number;
-      quantity: number;
-      itemNotes?: string;
-      selectedModifierOptionIds?: number[];
-    }[];
-  }) => api.post("/orders/online", data),
+  createOnlineOrder: (data: CreateOnlineOrderPayload) =>
+    api.post("/orders/online", data),
+
+  getPickupSlots: (quantity: number, modifiers: number) =>
+    api.get<PickupSlotsResponse>("/orders/online/pickup-slots", {
+      params: { quantity, modifiers },
+    }),
 
   getOnlineOrders: () => api.get("/orders/online"),
 
@@ -59,4 +77,9 @@ export const ordersService = {
     link.remove();
     window.URL.revokeObjectURL(url);
   },
+  
+  updateStatus: (id: number, status: string) =>
+  api.put(`/orders/${id}/status`, JSON.stringify(status), {
+    headers: { "Content-Type": "application/json" },
+  }),
 };
