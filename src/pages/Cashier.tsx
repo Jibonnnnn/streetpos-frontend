@@ -1,40 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BadgePill } from "@/components/common/BadgePill";
-import { Pagination } from "@/components/common/Pagination";
-import { usePagination } from "@/hooks/usePagination";
-import { ModalShell } from "@/components/dialogs/ModalShell";
 import { CashierSkeleton } from "@/components/skeletons/CashierSkeleton";
-import { AddonPicker } from "@/components/addons/AddonPicker";
 import { useCart } from "@/contexts/CartContext";
 import { useKioskMode } from "@/hooks/useKioskMode";
 import { useMenuItems } from "@/hooks/queries/useMenu";
 import { useMyOrders } from "@/hooks/queries/useOrders";
+import { usePagination } from "@/hooks/usePagination";
+import { useOfflineOrderQueue } from "@/hooks/useOfflineOrderQueue";
+import { OfflineBanner } from "@/components/pos/OfflineBanner";
+import {
+  PosTabBar,
+  type PosTab,
+  PosMenuGrid,
+  PosCartPanel,
+  PosRecentOrders,
+  PosStatsRow,
+  AddonsModal,
+  CheckoutModal,
+  OpenTabsPanel,
+  OnlineOrdersPanel,
+} from "./Cashier/index";
 import { ordersService } from "@/services/orders.service";
 import { promotionService } from "@/services/promotion.service";
 import { addonService } from "@/services/addon.service";
-import { getFullImageUrl } from "@/lib/imageUtils";
-import { toast } from "sonner";
-import { ReceiptPreview } from "@/components/receipts/ReceiptPreview";
+import { saveMenuCache } from "@/lib/offline/menuCache";
 import { printReceipt } from "@/lib/printReceipt";
-import {
-  CreditCard,
-  Plus,
-  Minus,
-  Trash2,
-  RefreshCw,
-  Loader2,
-  AlertTriangle,
-  Globe,
-  Download,
-  Printer,
-} from "lucide-react";
+import { toast } from "sonner";
 import type {
   MenuItem,
   Promotion,
-  CartItem,
   OrderResponse,
   PaymentMethod,
   OrderReceiptDto,
@@ -43,7 +37,6 @@ import type { ModifierGroup } from "@/types/addons";
 
 function optionLabelsFromIds(groups: ModifierGroup[], ids: number[]): string[] {
   const labels: string[] = [];
-
   for (const group of groups) {
     for (const option of group.options) {
       if (ids.includes(option.id)) {
@@ -55,8 +48,16 @@ function optionLabelsFromIds(groups: ModifierGroup[], ids: number[]): string[] {
       }
     }
   }
-
   return labels;
+}
+
+function isNetworkError(err: unknown): boolean {
+  const e = err as { code?: string; response?: unknown };
+  return (
+    e?.code === "ERR_NETWORK" ||
+    e?.code === "ECONNABORTED" ||
+    e?.response === undefined
+  );
 }
 
 export default function CashierPage() {
@@ -72,18 +73,43 @@ export default function CashierPage() {
     refetch: refetchOrders,
   } = useMyOrders();
 
+  // ---- Offline POS (POS only) ----
+  const {
+    isOnline,
+    pendingCount,
+    isSyncing,
+    enqueue: enqueueOfflineOrder,
+    runSync,
+  } = useOfflineOrderQueue();
+
   const [searchTerm, setSearchTerm] = useState("");
+  const [posTab, setPosTab] = useState<PosTab>("pos");
+
+  // Add-ons modal
   const [showModifiersModal, setShowModifiersModal] = useState(false);
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [customNote, setCustomNote] = useState("");
   const [addonGroups, setAddonGroups] = useState<ModifierGroup[]>([]);
   const [addonsLoading, setAddonsLoading] = useState(false);
 
+  // Checkout modal
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<PaymentMethod>("Cash");
   const [amountTendered, setAmountTendered] = useState("");
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [payLaterCustomerName, setPayLaterCustomerName] = useState("");
+  const [settleOrderId, setSettleOrderId] = useState<number | null>(null);
+  const [checkoutOnlineOrderId, setCheckoutOnlineOrderId] = useState<
+    number | null
+  >(null);
+  const [onlineOrderBeingCheckedOut, setOnlineOrderBeingCheckedOut] =
+    useState<OrderResponse | null>(null);
+
+  // Receipt
+  const [completedOrderId, setCompletedOrderId] = useState<number | null>(null);
+  const [receiptData, setReceiptData] = useState<OrderReceiptDto | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
 
   // Promotions
   const [activePromos, setActivePromos] = useState<Promotion[]>([]);
@@ -92,28 +118,26 @@ export default function CashierPage() {
   );
   const [previewDiscount, setPreviewDiscount] = useState(0);
 
-  // Online / open tabs
-  const [posTab, setPosTab] = useState<"pos" | "online" | "tabs">("pos");
-  const [onlineOrders, setOnlineOrders] = useState<any[]>([]);
+  // Online / tabs lists
+  const [onlineOrders, setOnlineOrders] = useState<OrderResponse[]>([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
-  const [expandedOnlineOrderId, setExpandedOnlineOrderId] = useState<
-    number | null
-  >(null);
-  const [checkoutOnlineOrderId, setCheckoutOnlineOrderId] = useState<
-    number | null
-  >(null);
-
   const [openTabs, setOpenTabs] = useState<OrderResponse[]>([]);
   const [openTabsLoading, setOpenTabsLoading] = useState(false);
-  const [settleOrderId, setSettleOrderId] = useState<number | null>(null);
-  const [payLaterCustomerName, setPayLaterCustomerName] = useState("");
 
-  // Receipt success state (shown inside checkout modal after paid completion)
-  const [completedOrderId, setCompletedOrderId] = useState<number | null>(null);
-  const [receiptData, setReceiptData] = useState<OrderReceiptDto | null>(null);
-  const [receiptLoading, setReceiptLoading] = useState(false);
+  // Persist menu for offline browse
+  useEffect(() => {
+    if (menuItems.length && navigator.onLine) {
+      void saveMenuCache(menuItems);
+    }
+  }, [menuItems]);
 
-  // ---------- data loaders ----------
+  useEffect(() => {
+    promotionService
+      .getActive()
+      .then((res) => setActivePromos(res.data ?? []))
+      .catch(() => {});
+  }, []);
+
   const fetchOnlineOrders = async () => {
     try {
       setOnlineLoading(true);
@@ -139,18 +163,10 @@ export default function CashierPage() {
   };
 
   useEffect(() => {
-    promotionService
-      .getActive()
-      .then((res) => setActivePromos(res.data ?? []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (posTab === "online") fetchOnlineOrders();
-    if (posTab === "tabs") fetchOpenTabs();
+    if (posTab === "online") void fetchOnlineOrders();
+    if (posTab === "tabs") void fetchOpenTabs();
   }, [posTab]);
 
-  // ---------- menu filter ----------
   const filteredMenu = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     if (!q) return menuItems.filter((m: MenuItem) => m.isActive);
@@ -164,10 +180,9 @@ export default function CashierPage() {
 
   const menuPage = usePagination<MenuItem>(filteredMenu, 12);
   const tabsPage = usePagination<OrderResponse>(openTabs, 10);
-  const onlinePage = usePagination<any>(onlineOrders, 10);
-  const recentPage = usePagination<any>(myOrders, 5);
+  const onlinePage = usePagination<OrderResponse>(onlineOrders, 10);
+  const recentPage = usePagination<OrderResponse>(myOrders, 5);
 
-  // ---------- promotion preview ----------
   const calculatePreviewDiscount = (promo: Promotion | null) => {
     if (!promo || cart.length === 0) return 0;
     switch (promo.type) {
@@ -190,73 +205,29 @@ export default function CashierPage() {
   };
 
   useEffect(() => {
-    if (
-      checkoutOnlineOrderId ||
-      settleOrderId ||
-      selectedPaymentMethod === "PayLater"
-    ) {
-      setPreviewDiscount(0);
-      setSelectedPromotionId(null);
-      return;
-    }
     const promo =
-      activePromos.find((p) => p.id === selectedPromotionId) || null;
+      activePromos.find((p) => p.id === selectedPromotionId) ?? null;
     setPreviewDiscount(calculatePreviewDiscount(promo));
-  }, [
-    selectedPromotionId,
-    cart,
-    activePromos,
-    total,
-    checkoutOnlineOrderId,
-    settleOrderId,
-    selectedPaymentMethod,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPromotionId, cart, total, activePromos]);
 
-  const onlineOrderBeingCheckedOut = onlineOrders.find(
-    (o) => o.id === checkoutOnlineOrderId,
-  );
-  const onlineOrderTotal = onlineOrderBeingCheckedOut?.total ?? 0;
-
-  const settleOrder = openTabs.find((o) => o.id === settleOrderId);
-  const settleTotal = settleOrder?.total ?? 0;
-
-  const finalTotal = settleOrderId
-    ? settleTotal
-    : checkoutOnlineOrderId
-      ? onlineOrderTotal
-      : Math.max(0, total - previewDiscount);
-
+  const finalTotal = Math.max(0, total - previewDiscount);
   const changeDue =
     selectedPaymentMethod === "Cash" && amountTendered
       ? Math.max(0, parseFloat(amountTendered) - finalTotal)
       : 0;
 
-  const pendingOnlineCount = onlineOrders.filter(
-    (o) => o.status === "Pending",
-  ).length;
-
-  // ---------- add-ons modal ----------
+  // ---- Add-ons ----
   const openModifiersModal = async (item: MenuItem) => {
     setSelectedItem(item);
     setCustomNote("");
-    setAddonGroups([]);
     setShowModifiersModal(true);
-
-    const embedded = (item as any).modifierGroups as
-      | ModifierGroup[]
-      | undefined;
-    if (embedded && embedded.length > 0) {
-      setAddonGroups(embedded);
-      return;
-    }
-
+    setAddonsLoading(true);
     try {
-      setAddonsLoading(true);
       const res = await addonService.getByMenuItem(item.id);
       setAddonGroups(res.data ?? []);
     } catch {
       setAddonGroups([]);
-      toast.error("Failed to load add-ons");
     } finally {
       setAddonsLoading(false);
     }
@@ -274,77 +245,79 @@ export default function CashierPage() {
     unitPrice: number,
   ) => {
     if (!selectedItem) return;
-
-    const selectedOptionLabels = optionLabelsFromIds(
-      addonGroups,
-      selectedOptionIds,
-    );
-
-    const cartItem: CartItem = {
+    addToCart({
       ...selectedItem,
       quantity: 1,
       selectedModifierOptionIds: selectedOptionIds,
-      selectedOptionLabels,
-      note: customNote.trim() || undefined,
+      selectedOptionLabels: optionLabelsFromIds(addonGroups, selectedOptionIds),
+      note: customNote || undefined,
       itemTotal: unitPrice,
-    };
-
-    addToCart(cartItem);
+    });
     closeModifiersModal();
-    toast.success(`${selectedItem.name} added to order`);
   };
 
-  const openOnlineCheckout = (order: any) => {
-    setCheckoutOnlineOrderId(order.id);
+  // ---- Checkout helpers ----
+  const openOnlineCheckout = (order: OrderResponse) => {
+    if (!isOnline) {
+      toast.error("This action needs an internet connection.");
+      return;
+    }
     setSettleOrderId(null);
+    setCheckoutOnlineOrderId(order.id);
+    setOnlineOrderBeingCheckedOut(order);
     setSelectedPaymentMethod("Cash");
     setAmountTendered("");
-    setSelectedPromotionId(null);
-    setPreviewDiscount(0);
     setShowCheckoutModal(true);
   };
 
   const openSettleCheckout = (order: OrderResponse) => {
-    setSettleOrderId(order.id);
+    if (!isOnline) {
+      toast.error("This action needs an internet connection.");
+      return;
+    }
     setCheckoutOnlineOrderId(null);
+    setOnlineOrderBeingCheckedOut(null);
+    setSettleOrderId(order.id);
     setSelectedPaymentMethod("Cash");
     setAmountTendered("");
-    setSelectedPromotionId(null);
-    setPreviewDiscount(0);
     setShowCheckoutModal(true);
   };
 
-  const closeCheckoutModal = () => {
+  const finishWithoutReceipt = () => {
     setShowCheckoutModal(false);
-    setCheckoutOnlineOrderId(null);
-    setSettleOrderId(null);
-    setPayLaterCustomerName("");
     setCompletedOrderId(null);
     setReceiptData(null);
-    setReceiptLoading(false);
+    setSettleOrderId(null);
+    setCheckoutOnlineOrderId(null);
+    setOnlineOrderBeingCheckedOut(null);
+    setAmountTendered("");
+    setSelectedPaymentMethod("Cash");
+    setSelectedPromotionId(null);
+    setPreviewDiscount(0);
+    setPayLaterCustomerName("");
   };
 
-  /** Load receipt after a completed (paid) order. */
+  const closeCheckoutModal = () => {
+    if (isCheckingOut) return;
+    finishWithoutReceipt();
+  };
+
   const showReceiptForOrder = async (orderId: number) => {
+    setCompletedOrderId(orderId);
+    setReceiptLoading(true);
     try {
-      setReceiptLoading(true);
-      setCompletedOrderId(orderId);
       const res = await ordersService.getReceiptData(orderId);
       setReceiptData(res.data);
     } catch {
-      toast.error("Could not load receipt.");
-      setCompletedOrderId(null);
       setReceiptData(null);
-      closeCheckoutModal();
+      toast.error("Could not load receipt");
     } finally {
       setReceiptLoading(false);
     }
   };
 
-  const finishWithoutReceipt = () => {
-    setCompletedOrderId(null);
-    setReceiptData(null);
-    closeCheckoutModal();
+  const resetAfterSuccess = () => {
+    clearCart();
     setAmountTendered("");
     setSelectedPaymentMethod("Cash");
     setSelectedPromotionId(null);
@@ -352,13 +325,12 @@ export default function CashierPage() {
     setPayLaterCustomerName("");
   };
 
-  // ---------- checkout ----------
+  // ---- Checkout (with offline queue for normal POS cart) ----
   const handleCheckout = async () => {
     if (selectedPaymentMethod === "Cash" && !amountTendered) {
       toast.error("Please enter amount tendered");
       return;
     }
-
     if (
       selectedPaymentMethod === "Cash" &&
       parseFloat(amountTendered) < finalTotal
@@ -370,7 +342,7 @@ export default function CashierPage() {
     try {
       setIsCheckingOut(true);
 
-      // 1. Settle open tab → Completed → show receipt
+      // 1. Settle open tab (online only)
       if (settleOrderId) {
         const settleRes = await ordersService.settlePayLater(settleOrderId, {
           paymentMethod: selectedPaymentMethod,
@@ -382,19 +354,17 @@ export default function CashierPage() {
             selectedPaymentMethod !== "Cash" ? `TX-${Date.now()}` : undefined,
           notes: "",
         });
-
         toast.success("✅ Tab settled successfully!");
         setAmountTendered("");
         setSelectedPaymentMethod("Cash");
-        fetchOpenTabs();
-        refetchOrders();
-
+        void fetchOpenTabs();
+        void refetchOrders();
         const settledId = settleRes.data?.id ?? settleOrderId;
         await showReceiptForOrder(settledId);
         return;
       }
 
-      // 2. Online order checkout → Completed → show receipt
+      // 2. Online order checkout (online only)
       if (checkoutOnlineOrderId) {
         await ordersService.checkoutOrder({
           orderId: checkoutOnlineOrderId,
@@ -408,18 +378,16 @@ export default function CashierPage() {
           notes: "",
           promotionId: undefined,
         });
-
         toast.success("✅ Online order completed!");
         setAmountTendered("");
         setSelectedPaymentMethod("Cash");
-        fetchOnlineOrders();
-        refetchOrders();
-
+        void fetchOnlineOrders();
+        void refetchOrders();
         await showReceiptForOrder(checkoutOnlineOrderId);
         return;
       }
 
-      // 3. Normal POS cart
+      // 3. Normal POS cart (supports offline)
       if (cart.length === 0) {
         toast.error("Cart is empty");
         return;
@@ -436,12 +404,7 @@ export default function CashierPage() {
         })),
       };
 
-      const createRes = await ordersService.createOrder(orderPayload);
-      const orderId = createRes.data?.id;
-      if (!orderId) throw new Error("Failed to create order");
-
-      await ordersService.checkoutOrder({
-        orderId,
+      const checkoutPayload = {
         paymentMethod: selectedPaymentMethod,
         amountTendered:
           selectedPaymentMethod === "Cash"
@@ -458,21 +421,67 @@ export default function CashierPage() {
           selectedPaymentMethod === "PayLater"
             ? payLaterCustomerName.trim()
             : undefined,
-      });
+      };
 
-      clearCart();
-      setAmountTendered("");
-      setSelectedPaymentMethod("Cash");
-      setSelectedPromotionId(null);
-      setPreviewDiscount(0);
-      refetchOrders();
+      const itemsSnapshot = cart.map((item) => ({
+        menuItemId: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.itemTotal / Math.max(1, item.quantity),
+        itemTotal: item.itemTotal,
+        selectedModifierOptionIds: item.selectedModifierOptionIds || [],
+        selectedOptionLabels: item.selectedOptionLabels,
+        itemNotes: item.note || "",
+      }));
+
+      const queueAndFinish = async () => {
+        const queued = await enqueueOfflineOrder({
+          orderPayload,
+          checkoutPayload,
+          itemsSnapshot,
+          subtotal: total,
+          discountAmount: previewDiscount,
+          total: finalTotal,
+        });
+        resetAfterSuccess();
+        setShowCheckoutModal(false);
+        toast.success(
+          `Order saved offline (${queued.localOrderNumber}). It will sync when you are back online.`,
+        );
+      };
+
+      if (!navigator.onLine) {
+        await queueAndFinish();
+        return;
+      }
+
+      let orderId: number;
+      try {
+        const createRes = await ordersService.createOrder(orderPayload);
+        orderId = createRes.data?.id;
+        if (!orderId) throw new Error("Failed to create order");
+
+        await ordersService.checkoutOrder({
+          orderId,
+          ...checkoutPayload,
+        });
+      } catch (err) {
+        if (isNetworkError(err)) {
+          await queueAndFinish();
+          return;
+        }
+        throw err;
+      }
+
+      resetAfterSuccess();
+      void refetchOrders();
 
       if (selectedPaymentMethod === "PayLater") {
-        // Still Pending – no receipt yet
         toast.success("Order placed on tab (Pay Later)", {
-          description: "You can collect payment later from the Open Tabs tab.",
+          description:
+            "You can collect payment later from the Open Tabs tab.",
         });
-        fetchOpenTabs();
+        void fetchOpenTabs();
         finishWithoutReceipt();
       } else {
         toast.success("✅ Order completed successfully!", {
@@ -492,1163 +501,161 @@ export default function CashierPage() {
     }
   };
 
-  // ---------- render ----------
   if (menuLoading) return <CashierSkeleton />;
 
   return (
-    <div className="mx-auto max-w-screen-2xl space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
+      <OfflineBanner
+        isOnline={isOnline}
+        pendingCount={pendingCount}
+        isSyncing={isSyncing}
+        onSyncNow={() => void runSync()}
+      />
+
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
-            POS Terminal
+            Cashier
           </h1>
-          <p className="text-muted-foreground">
-            Walk-in orders • Online orders • Open tabs • Payment
+          <p className="mt-1 text-sm text-muted-foreground">
+            Point of sale · take orders, open tabs, and online pickups
           </p>
         </div>
         {posTab === "pos" && (
           <Input
-            placeholder="Search menu items or category..."
-            className="max-w-md"
+            placeholder="Search menu…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            className="max-w-xs rounded-2xl"
           />
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant={posTab === "pos" ? "default" : "outline"}
-          className="rounded-2xl"
-          onClick={() => setPosTab("pos")}
-        >
-          POS Terminal
-        </Button>
+      <PosTabBar
+        tab={posTab}
+        onChange={setPosTab}
+        onlineCount={onlineOrders.filter((o) => o.status !== "Completed").length}
+        tabsCount={openTabs.length}
+        isOnline={isOnline}
+      />
 
-        <Button
-          variant={posTab === "online" ? "default" : "outline"}
-          className="rounded-2xl gap-2"
-          onClick={() => setPosTab("online")}
-        >
-          <Globe className="h-4 w-4" />
-          Orders From Online
-          {pendingOnlineCount > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white">
-              {pendingOnlineCount}
-            </span>
-          )}
-        </Button>
-
-        <Button
-          variant={posTab === "tabs" ? "default" : "outline"}
-          className="rounded-2xl gap-2"
-          onClick={() => setPosTab("tabs")}
-        >
-          Open Tabs
-          {openTabs.length > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white">
-              {openTabs.length}
-            </span>
-          )}
-        </Button>
-      </div>
-
-      {/* ========== OPEN TABS ========== */}
       {posTab === "tabs" ? (
-        <Card className="border-border/60 bg-white/80 shadow-sm">
-          <CardContent className="p-6">
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-heading text-2xl font-semibold tracking-tight">
-                  Open Tabs (Pay Later)
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Unpaid orders. Collect payment to close the tab.
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={fetchOpenTabs}
-                disabled={openTabsLoading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${openTabsLoading ? "animate-spin" : ""}`}
-                />
-              </Button>
-            </div>
-
-            {openTabsLoading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : openTabs.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
-                No open tabs right now.
-              </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  {tabsPage.paginated.map((order) => {
-                    const items =
-                      order.items || (order as any).orderItems || [];
-                    const displayName =
-                      order.customerName?.trim() ||
-                      order.cashierName?.trim() ||
-                      "Walk-in";
-
-                    return (
-                      <div
-                        key={order.id}
-                        className="rounded-2xl border border-border/60 bg-zinc-50 p-5 dark:bg-zinc-950/50"
-                      >
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-mono font-semibold">
-                                {order.orderNumber || `#${order.id}`}
-                              </p>
-                              <BadgePill tone="warning">Pay Later</BadgePill>
-                            </div>
-                            <p className="mt-2 text-sm font-medium">
-                              Customer:{" "}
-                              <span className="text-amber-700 dark:text-amber-400">
-                                {displayName}
-                              </span>
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {new Date(
-                                order.createdAt?.endsWith?.("Z")
-                                  ? order.createdAt
-                                  : order.createdAt + "Z",
-                              ).toLocaleString([], {
-                                month: "short",
-                                day: "numeric",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                            <ul className="mt-3 space-y-1">
-                              {items.length === 0 ? (
-                                <li className="text-sm text-muted-foreground">
-                                  No items
-                                </li>
-                              ) : (
-                                items
-                                  .slice(0, 5)
-                                  .map((item: any, idx: number) => {
-                                    const name =
-                                      item.menuItemName ||
-                                      item.menuItem?.name ||
-                                      item.name ||
-                                      "Item";
-                                    return (
-                                      <li
-                                        key={idx}
-                                        className="text-sm text-muted-foreground"
-                                      >
-                                        {item.quantity}× {name}
-                                      </li>
-                                    );
-                                  })
-                              )}
-                              {items.length > 5 && (
-                                <li className="text-xs text-muted-foreground">
-                                  +{items.length - 5} more…
-                                </li>
-                              )}
-                            </ul>
-                          </div>
-                          <div className="flex flex-col items-end gap-3 sm:shrink-0">
-                            <p className="text-xl font-bold">
-                              ₱{(order.total || 0).toFixed(2)}
-                            </p>
-                            <Button
-                              className="rounded-2xl"
-                              onClick={() => openSettleCheckout(order)}
-                            >
-                              <CreditCard className="mr-2 h-4 w-4" />
-                              Collect Payment
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <Pagination
-                  page={tabsPage.page}
-                  totalPages={tabsPage.totalPages}
-                  total={tabsPage.total}
-                  from={tabsPage.from}
-                  to={tabsPage.to}
-                  onPageChange={tabsPage.setPage}
-                  pageSize={tabsPage.pageSize}
-                  onPageSizeChange={tabsPage.setPageSize}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <OpenTabsPanel
+          tabs={openTabs}
+          loading={openTabsLoading}
+          tabsPage={tabsPage}
+          isOnline={isOnline}
+          onRefresh={fetchOpenTabs}
+          onSettle={openSettleCheckout}
+        />
       ) : posTab === "online" ? (
-        /* ========== ONLINE ========== */
-        <Card className="border-border/60 bg-white/80 shadow-sm">
-          <CardContent className="p-6">
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-heading text-2xl font-semibold tracking-tight">
-                  Orders From Online
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Customer orders placed from the landing page.
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={fetchOnlineOrders}
-                disabled={onlineLoading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${onlineLoading ? "animate-spin" : ""}`}
-                />
-              </Button>
-            </div>
-
-            {onlineLoading ? (
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : onlineOrders.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
-                No online orders yet.
-              </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  {onlinePage.paginated.map((order) => {
-                    const items = order.items || order.orderItems || [];
-                    const isExpanded = expandedOnlineOrderId === order.id;
-
-                    return (
-                      <div
-                        key={order.id}
-                        className="rounded-2xl border border-border/60 bg-zinc-50 p-5 transition-colors dark:bg-zinc-950/50"
-                      >
-                        <button
-                          type="button"
-                          className="flex w-full flex-col gap-4 text-left sm:flex-row sm:items-start sm:justify-between"
-                          onClick={() =>
-                            setExpandedOnlineOrderId(
-                              isExpanded ? null : order.id,
-                            )
-                          }
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-mono font-semibold">
-                                {order.orderNumber || `#${order.id}`}
-                              </p>
-                              <BadgePill
-                                tone={
-                                  order.status === "Completed"
-                                    ? "success"
-                                    : order.status === "Pending"
-                                      ? "warning"
-                                      : "neutral"
-                                }
-                              >
-                                {order.status}
-                              </BadgePill>
-                              <span className="text-xs text-muted-foreground">
-                                {isExpanded
-                                  ? "Hide details ▲"
-                                  : "View details ▼"}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-sm font-medium">
-                              Customer:{" "}
-                              <span className="text-amber-700 dark:text-amber-400">
-                                {order.customerName || "—"}
-                              </span>
-                            </p>
-                            {(order.estimatedReadyAt ||
-                              order.preferredPickupAt) && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {order.estimatedReadyAt && (
-                                  <>
-                                    ETA ~{" "}
-                                    {new Date(
-                                      order.estimatedReadyAt.endsWith?.("Z")
-                                        ? order.estimatedReadyAt
-                                        : order.estimatedReadyAt + "Z",
-                                    ).toLocaleTimeString([], {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                    })}
-                                  </>
-                                )}
-                                {order.estimatedReadyAt &&
-                                  order.preferredPickupAt &&
-                                  " · "}
-                                {order.preferredPickupAt && (
-                                  <>
-                                    Pickup{" "}
-                                    {new Date(
-                                      order.preferredPickupAt.endsWith?.("Z")
-                                        ? order.preferredPickupAt
-                                        : order.preferredPickupAt + "Z",
-                                    ).toLocaleTimeString([], {
-                                      hour: "numeric",
-                                      minute: "2-digit",
-                                    })}
-                                  </>
-                                )}
-                              </p>
-                            )}
-                            {(order.customerPhone || order.phoneNumber) && (
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                📱 {order.customerPhone || order.phoneNumber}
-                              </p>
-                            )}
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {new Date(
-                                order.createdAt?.endsWith?.("Z")
-                                  ? order.createdAt
-                                  : order.createdAt + "Z",
-                              ).toLocaleString([], {
-                                month: "short",
-                                day: "numeric",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end gap-3 sm:shrink-0">
-                            <p className="text-xl font-bold">
-                              ₱{(order.total || 0).toFixed(2)}
-                            </p>
-                          </div>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="mt-4 border-t border-border/50 pt-4">
-                            <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                              Order items
-                            </p>
-                            {items.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">
-                                No item details available.
-                              </p>
-                            ) : (
-                              <ul className="space-y-2">
-                                {items.map((item: any, idx: number) => (
-                                  <li
-                                    key={idx}
-                                    className="flex items-start justify-between gap-3 rounded-xl bg-white/80 px-3 py-2.5 dark:bg-zinc-900/60"
-                                  >
-                                    <div className="min-w-0">
-                                      <p className="text-sm font-medium">
-                                        {item.quantity}×{" "}
-                                        {item.menuItemName ||
-                                          item.menuItem?.name ||
-                                          "Item"}
-                                      </p>
-                                      {item.itemNotes && (
-                                        <p className="mt-0.5 text-xs text-muted-foreground">
-                                          Note: {item.itemNotes}
-                                        </p>
-                                      )}
-                                      {(item.selectedModifiers || []).length >
-                                        0 && (
-                                        <p className="mt-0.5 text-xs text-muted-foreground">
-                                          {(item.selectedModifiers || [])
-                                            .map(
-                                              (m: any) =>
-                                                m.name || m.modifierOptionName,
-                                            )
-                                            .join(", ")}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <p className="shrink-0 text-sm font-semibold text-amber-600">
-                                      ₱
-                                      {(
-                                        item.subtotal ??
-                                        (item.unitPrice || 0) *
-                                          (item.quantity || 1)
-                                      ).toFixed(2)}
-                                    </p>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                            {order.customerNotes && (
-                              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                                <span className="font-medium">
-                                  Customer note:
-                                </span>{" "}
-                                {order.customerNotes}
-                              </p>
-                            )}
-                            {/* ===== Status action buttons ===== */}
-                            <div className="mt-4 flex flex-wrap justify-end gap-2">
-                              {/* Prepare Order → Preparing */}
-                              {order.status === "Pending" && (
-                                <Button
-                                  variant="outline"
-                                  className="rounded-2xl"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    try {
-                                      await ordersService.updateStatus(
-                                        order.id,
-                                        "Preparing",
-                                      );
-                                      toast.success(
-                                        "Order marked as Preparing – customer notified via SMS",
-                                      );
-                                      fetchOnlineOrders();
-                                    } catch {
-                                      toast.error(
-                                        "Failed to mark as Preparing",
-                                      );
-                                    }
-                                  }}
-                                >
-                                  Prepare Order
-                                </Button>
-                              )}
-
-                              {/* Ready for Pickup → Ready */}
-                              {order.status === "Preparing" && (
-                                <Button
-                                  variant="outline"
-                                  className="rounded-2xl"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    try {
-                                      await ordersService.updateStatus(
-                                        order.id,
-                                        "Ready",
-                                      );
-                                      toast.success(
-                                        "Order marked as Ready – customer notified via SMS",
-                                      );
-                                      fetchOnlineOrders();
-                                    } catch {
-                                      toast.error("Failed to mark as Ready");
-                                    }
-                                  }}
-                                >
-                                  Ready for Pickup
-                                </Button>
-                              )}
-
-                              {/* Checkout – available until the order is Completed */}
-                              {(order.status === "Pending" ||
-                                order.status === "Preparing" ||
-                                order.status === "Ready") && (
-                                <Button
-                                  className="rounded-2xl"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openOnlineCheckout(order);
-                                  }}
-                                >
-                                  <CreditCard className="mr-2 h-4 w-4" />
-                                  Checkout
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {!isExpanded && order.status === "Pending" && (
-                          <div className="mt-4 flex justify-end">
-                            <Button
-                              className="rounded-2xl"
-                              onClick={() => openOnlineCheckout(order)}
-                            >
-                              <CreditCard className="mr-2 h-4 w-4" />
-                              Checkout
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <Pagination
-                  page={onlinePage.page}
-                  totalPages={onlinePage.totalPages}
-                  total={onlinePage.total}
-                  from={onlinePage.from}
-                  to={onlinePage.to}
-                  onPageChange={onlinePage.setPage}
-                  pageSize={onlinePage.pageSize}
-                  onPageSizeChange={onlinePage.setPageSize}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <OnlineOrdersPanel
+          orders={onlineOrders}
+          loading={onlineLoading}
+          onlinePage={onlinePage}
+          isOnline={isOnline}
+          onRefresh={fetchOnlineOrders}
+          onCheckout={openOnlineCheckout}
+        />
       ) : (
-        /* ========== POS ========== */
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Card className="border-border/40 bg-gradient-to-br from-white to-zinc-50/80 shadow-sm dark:from-zinc-950 dark:to-zinc-900/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Menu Items
-                </p>
-                <p className="mt-2 font-heading text-3xl font-semibold">
-                  {filteredMenu.length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/40 bg-gradient-to-br from-white to-zinc-50/80 shadow-sm dark:from-zinc-950 dark:to-zinc-900/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Items in Cart
-                </p>
-                <p className="mt-2 font-heading text-3xl font-semibold">
-                  {cart.length}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="border-border/40 bg-gradient-to-br from-white to-zinc-50/80 shadow-sm dark:from-zinc-950 dark:to-zinc-900/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Recent Orders
-                </p>
-                <p className="mt-2 font-heading text-3xl font-semibold">
-                  {myOrders.length}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <PosStatsRow
+            menuCount={filteredMenu.length}
+            cartCount={cart.length}
+            recentCount={myOrders.length}
+          />
 
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-            {/* Menu grid */}
             <div className="lg:col-span-7">
-              <Card className="overflow-hidden border-border/40 bg-white/90 shadow-sm backdrop-blur-sm dark:bg-zinc-950/60">
-                <CardContent className="p-5 md:p-6">
-                  <div className="mb-6 flex items-end justify-between gap-4">
-                    <div>
-                      <h2 className="font-heading text-2xl font-semibold tracking-tight">
-                        Menu Items
-                      </h2>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Tap a card to choose add-ons and build the order.
-                      </p>
-                    </div>
-                    <BadgePill tone="info" className="shrink-0">
-                      {filteredMenu.length} available
-                    </BadgePill>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {menuPage.paginated.map((item) => {
-                      const hasLowStock = item.inventoryLinks?.some(
-                        (link) => link.quantityUsedPerUnit > 5,
-                      );
-                      const imageSrc = getFullImageUrl(
-                        item.imageFileName ?? item.imageUrl,
-                      );
-
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => openModifiersModal(item)}
-                          className="group relative flex flex-col overflow-hidden rounded-3xl border border-zinc-200/80 bg-white text-left shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-amber-300/60 hover:shadow-[0_20px_40px_rgba(245,158,11,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-zinc-800 dark:bg-zinc-900/80 dark:hover:border-amber-500/30"
-                        >
-                          <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-zinc-100 to-zinc-50 dark:from-zinc-800 dark:to-zinc-900">
-                            {imageSrc ? (
-                              <img
-                                src={imageSrc}
-                                alt={item.name}
-                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display =
-                                    "none";
-                                }}
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center text-5xl opacity-25">
-                                ☕
-                              </div>
-                            )}
-                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-60" />
-                            <div className="absolute bottom-3 right-3 rounded-full bg-white/95 px-3 py-1.5 text-sm font-semibold text-amber-700 shadow-sm backdrop-blur-sm dark:bg-zinc-950/90 dark:text-amber-400">
-                              ₱{item.price.toFixed(2)}
-                            </div>
-                            {hasLowStock && (
-                              <div className="absolute left-3 top-3">
-                                <BadgePill
-                                  tone="warning"
-                                  className="gap-1 shadow-sm"
-                                >
-                                  <AlertTriangle size={12} />
-                                  Low stock
-                                </BadgePill>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-1 flex-col p-4">
-                            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                              {item.categoryName}
-                            </p>
-                            <h3 className="mt-1 font-heading text-base font-semibold leading-snug tracking-tight text-zinc-900 dark:text-zinc-50">
-                              {item.name}
-                            </h3>
-                            {item.description && (
-                              <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                                {item.description}
-                              </p>
-                            )}
-                            <div className="mt-auto pt-3">
-                              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 opacity-0 transition-opacity duration-300 group-hover:opacity-100 dark:text-amber-400">
-                                <Plus className="h-3.5 w-3.5" />
-                                Add to order
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {filteredMenu.length === 0 && (
-                    <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
-                      No menu items match your search.
-                    </div>
-                  )}
-
-                  {filteredMenu.length > 0 && (
-                    <Pagination
-                      page={menuPage.page}
-                      totalPages={menuPage.totalPages}
-                      total={menuPage.total}
-                      from={menuPage.from}
-                      to={menuPage.to}
-                      onPageChange={menuPage.setPage}
-                      pageSize={menuPage.pageSize}
-                      onPageSizeChange={menuPage.setPageSize}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+              <PosMenuGrid
+                menuPage={menuPage}
+                filteredCount={filteredMenu.length}
+                onSelectItem={openModifiersModal}
+              />
             </div>
-
-            {/* Sidebar */}
             <div className="space-y-6 lg:col-span-5">
-              <Card className="border-border/60 bg-white/80 shadow-sm">
-                <CardContent className="p-6">
-                  <div className="mb-6 flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="font-heading text-2xl font-semibold tracking-tight">
-                        Current Order
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        Review items before checking out.
-                      </p>
-                    </div>
-                    <BadgePill tone="neutral">{cart.length} items</BadgePill>
-                  </div>
-
-                  <div className="min-h-[200px] max-h-[300px] space-y-3 overflow-auto pr-1">
-                    {cart.length === 0 ? (
-                      <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-16 text-center text-muted-foreground">
-                        Your cart is empty.
-                        <br />
-                        Tap items to add.
-                      </div>
-                    ) : (
-                      cart.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium leading-tight">
-                              {item.name}
-                            </p>
-                            {item.selectedOptionLabels?.length ? (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {item.selectedOptionLabels.join(", ")}
-                              </p>
-                            ) : null}
-                            <p className="mt-1 text-sm font-semibold text-amber-600">
-                              ₱{item.itemTotal.toFixed(2)}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 rounded-xl"
-                              onClick={() =>
-                                updateQuantity(idx, item.quantity - 1)
-                              }
-                              disabled={item.quantity <= 1}
-                            >
-                              <Minus className="h-3.5 w-3.5" />
-                            </Button>
-                            <span className="w-8 text-center text-sm font-semibold">
-                              {item.quantity}
-                            </span>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8 rounded-xl"
-                              onClick={() =>
-                                updateQuantity(idx, item.quantity + 1)
-                              }
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </Button>
-                            <button
-                              onClick={() => removeFromCart(idx)}
-                              className="ml-1 rounded-xl p-2 text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/30"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {activePromos.length > 0 &&
-                    cart.length > 0 &&
-                    selectedPaymentMethod !== "PayLater" && (
-                      <div className="mt-5 rounded-2xl border border-border/60 bg-zinc-50 p-4 dark:bg-zinc-900/50">
-                        <p className="mb-3 text-sm font-medium">
-                          Apply Promotion
-                        </p>
-                        <div className="space-y-1">
-                          <label className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800">
-                            <input
-                              type="radio"
-                              name="promo"
-                              checked={selectedPromotionId === null}
-                              onChange={() => setSelectedPromotionId(null)}
-                            />
-                            <span className="text-sm">None</span>
-                          </label>
-                          {activePromos.map((promo) => {
-                            const label =
-                              promo.type === "FixedAmount"
-                                ? `₱${promo.value} off`
-                                : promo.type === "BuyOneGetOne"
-                                  ? "Buy 1 Get 1"
-                                  : `${promo.value}% off`;
-                            return (
-                              <label
-                                key={promo.id}
-                                className="flex cursor-pointer items-center gap-3 rounded-xl p-2.5 hover:bg-white dark:hover:bg-zinc-800"
-                              >
-                                <input
-                                  type="radio"
-                                  name="promo"
-                                  checked={selectedPromotionId === promo.id}
-                                  onChange={() =>
-                                    setSelectedPromotionId(promo.id)
-                                  }
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-medium">
-                                    {promo.name}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {label}
-                                  </p>
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                        {previewDiscount > 0 && (
-                          <p className="mt-3 text-sm font-semibold text-emerald-600">
-                            Discount: −₱{previewDiscount.toFixed(2)}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                  <div className="mt-6 border-t border-border/60 pt-5">
-                    {previewDiscount > 0 && (
-                      <div className="mb-3 space-y-1 text-sm">
-                        <div className="flex justify-between text-muted-foreground">
-                          <span>Subtotal</span>
-                          <span>₱{total.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-emerald-600">
-                          <span>Discount</span>
-                          <span>−₱{previewDiscount.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    )}
-                    <div className="mb-6 flex items-center justify-between text-3xl font-bold">
-                      <span>Total</span>
-                      <span>₱{finalTotal.toFixed(2)}</span>
-                    </div>
-                    <Button
-                      onClick={() => {
-                        setSettleOrderId(null);
-                        setCheckoutOnlineOrderId(null);
-                        setShowCheckoutModal(true);
-                      }}
-                      className="h-14 w-full text-lg font-semibold"
-                      disabled={cart.length === 0}
-                    >
-                      <CreditCard className="mr-3 h-5 w-5" />
-                      Proceed to Checkout
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/60 bg-white/80 shadow-sm">
-                <CardContent className="p-6">
-                  <div className="mb-6 flex items-center justify-between gap-4">
-                    <div>
-                      <h2 className="font-heading text-2xl font-semibold tracking-tight">
-                        Recent Orders
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        Quick access to recent activity.
-                      </p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => refetchOrders()}
-                      disabled={ordersLoading}
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 ${ordersLoading ? "animate-spin" : ""}`}
-                      />
-                    </Button>
-                  </div>
-
-                  <div className="max-h-[260px] space-y-3 overflow-auto pr-1">
-                    {ordersLoading ? (
-                      <div className="flex justify-center py-12">
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                      </div>
-                    ) : myOrders.length === 0 ? (
-                      <div className="rounded-3xl border border-dashed border-border/70 bg-muted/20 py-12 text-center text-muted-foreground">
-                        No recent orders yet.
-                      </div>
-                    ) : (
-                      recentPage.paginated.map((order: any) => (
-                        <div
-                          key={order.id}
-                          className="rounded-2xl border border-border/60 bg-zinc-50 p-4 dark:bg-zinc-950/50"
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <div className="font-mono font-medium">
-                                {order.orderNumber || `#${order.id}`}
-                              </div>
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {new Date(
-                                  order.createdAt?.endsWith?.("Z")
-                                    ? order.createdAt
-                                    : order.createdAt + "Z",
-                                ).toLocaleString([], {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">
-                                ₱{(order.total || 0).toFixed(2)}
-                              </div>
-                              <div className="mt-2">
-                                <BadgePill
-                                  tone={
-                                    order.status === "Completed"
-                                      ? "success"
-                                      : order.paymentMethod === "PayLater"
-                                        ? "warning"
-                                        : "warning"
-                                  }
-                                >
-                                  {order.paymentMethod === "PayLater" &&
-                                  order.status === "Pending"
-                                    ? "Pay Later"
-                                    : order.status}
-                                </BadgePill>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  {myOrders.length > 0 && (
-                    <Pagination
-                      page={recentPage.page}
-                      totalPages={recentPage.totalPages}
-                      total={recentPage.total}
-                      from={recentPage.from}
-                      to={recentPage.to}
-                      onPageChange={recentPage.setPage}
-                      pageSize={recentPage.pageSize}
-                      onPageSizeChange={recentPage.setPageSize}
-                    />
-                  )}
-                </CardContent>
-              </Card>
+              <PosCartPanel
+                cart={cart}
+                total={total}
+                finalTotal={finalTotal}
+                previewDiscount={previewDiscount}
+                activePromos={activePromos}
+                selectedPromotionId={selectedPromotionId}
+                selectedPaymentMethod={selectedPaymentMethod}
+                onSelectPromotion={setSelectedPromotionId}
+                onUpdateQuantity={updateQuantity}
+                onRemove={removeFromCart}
+                onCheckout={() => {
+                  setSettleOrderId(null);
+                  setCheckoutOnlineOrderId(null);
+                  setOnlineOrderBeingCheckedOut(null);
+                  setShowCheckoutModal(true);
+                }}
+              />
+              <PosRecentOrders
+                orders={myOrders}
+                loading={ordersLoading}
+                recentPage={recentPage}
+                onRefresh={() => void refetchOrders()}
+              />
             </div>
           </div>
         </>
       )}
 
-      {/* ========== ADD-ONS MODAL (AddonPicker) ========== */}
-      {showModifiersModal && selectedItem && (
-        <ModalShell
-          open={showModifiersModal}
-          title={selectedItem.name}
-          description={`Base price: ₱${selectedItem.price.toFixed(2)} · choose the add-ons for this item`}
-          onClose={closeModifiersModal}
-          className="max-w-md"
-        >
-          <div className="space-y-5">
-            {addonsLoading ? (
-              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading add-ons…
-              </div>
-            ) : (
-              <>
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Notes
-                  </label>
-                  <Input
-                    placeholder="No ice, extra sugar..."
-                    value={customNote}
-                    onChange={(e) => setCustomNote(e.target.value)}
-                  />
-                </div>
+      <AddonsModal
+        open={showModifiersModal}
+        item={selectedItem}
+        groups={addonGroups}
+        loading={addonsLoading}
+        note={customNote}
+        onNoteChange={setCustomNote}
+        onConfirm={handleAddonConfirm}
+        onClose={closeModifiersModal}
+      />
 
-                <AddonPicker
-                  groups={addonGroups}
-                  basePrice={selectedItem.price}
-                  onConfirm={handleAddonConfirm}
-                  onCancel={closeModifiersModal}
-                  confirmLabel="Add to order"
-                />
-              </>
-            )}
-          </div>
-        </ModalShell>
-      )}
-
-      {/* ========== CHECKOUT / SETTLE MODAL ========== */}
-      {showCheckoutModal && (
-        <ModalShell
-          open={showCheckoutModal}
-          title={
-            completedOrderId || receiptLoading
-              ? "Order Complete"
-              : settleOrderId
-                ? "Collect Payment (Open Tab)"
-                : checkoutOnlineOrderId
-                  ? "Complete Online Order"
-                  : "Complete Payment"
+      <CheckoutModal
+        open={showCheckoutModal}
+        finalTotal={
+          settleOrderId
+            ? openTabs.find((t) => t.id === settleOrderId)?.total ?? finalTotal
+            : checkoutOnlineOrderId
+              ? onlineOrderBeingCheckedOut?.total ?? finalTotal
+              : finalTotal
+        }
+        previewDiscount={previewDiscount}
+        selectedPaymentMethod={selectedPaymentMethod}
+        amountTendered={amountTendered}
+        changeDue={changeDue}
+        payLaterCustomerName={payLaterCustomerName}
+        isCheckingOut={isCheckingOut}
+        settleOrderId={settleOrderId}
+        checkoutOnlineOrderId={checkoutOnlineOrderId}
+        onlineCustomerName={onlineOrderBeingCheckedOut?.customerName}
+        completedOrderId={completedOrderId}
+        receiptData={receiptData}
+        receiptLoading={receiptLoading}
+        onPaymentMethodChange={setSelectedPaymentMethod}
+        onAmountTenderedChange={setAmountTendered}
+        onPayLaterNameChange={setPayLaterCustomerName}
+        onConfirm={handleCheckout}
+        onClose={closeCheckoutModal}
+        onDownloadPdf={async () => {
+          if (!completedOrderId) return;
+          try {
+            await ordersService.downloadReceiptPdf(
+              completedOrderId,
+              receiptData?.orderNumber,
+            );
+            toast.success("PDF downloaded");
+          } catch {
+            toast.error("Failed to download PDF");
           }
-          description={
-            completedOrderId || receiptLoading
-              ? receiptData?.orderNumber
-                ? `Receipt · ${receiptData.orderNumber}`
-                : "Preparing receipt…"
-              : settleOrderId
-                ? `Settling tab · ₱${finalTotal.toFixed(2)}`
-                : checkoutOnlineOrderId
-                  ? `Online order · ${onlineOrderBeingCheckedOut?.customerName || ""}`
-                  : `Order total: ₱${finalTotal.toFixed(2)}`
-          }
-          onClose={closeCheckoutModal}
-          className="max-w-md"
-        >
-          {receiptLoading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              <p className="text-sm">Loading receipt…</p>
-            </div>
-          ) : completedOrderId && receiptData ? (
-            <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-lg font-semibold text-emerald-600">
-                  Order completed!
-                </p>
-                <p className="font-mono text-sm text-muted-foreground">
-                  {receiptData.orderNumber}
-                </p>
-              </div>
-
-              <div className="max-h-[360px] overflow-auto rounded-xl border border-border/60 bg-white">
-                <ReceiptPreview receipt={receiptData} />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Button
-                  className="h-12 w-full"
-                  onClick={async () => {
-                    try {
-                      await ordersService.downloadReceiptPdf(
-                        completedOrderId,
-                        receiptData.orderNumber,
-                      );
-                      toast.success("PDF downloaded");
-                    } catch {
-                      toast.error("Failed to download PDF");
-                    }
-                  }}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download PDF
-                </Button>
-
-                <Button
-                  variant="outline"
-                  className="h-12 w-full"
-                  onClick={() => printReceipt()}
-                >
-                  <Printer className="mr-2 h-4 w-4" />
-                  Print Receipt
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  className="h-11 w-full"
-                  onClick={() => finishWithoutReceipt()}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="text-5xl font-bold tracking-tight">
-                  ₱{finalTotal.toFixed(2)}
-                </div>
-                {!settleOrderId &&
-                  !checkoutOnlineOrderId &&
-                  previewDiscount > 0 && (
-                    <p className="mt-2 text-sm text-emerald-600">
-                      Includes −₱{previewDiscount.toFixed(2)} discount
-                    </p>
-                  )}
-              </div>
-
-              {!settleOrderId &&
-                !checkoutOnlineOrderId &&
-                selectedPaymentMethod === "PayLater" && (
-                  <div>
-                    <label className="mb-2 block text-sm font-medium">
-                      Customer Name <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      placeholder="Juan Dela Cruz"
-                      value={payLaterCustomerName}
-                      onChange={(e) => setPayLaterCustomerName(e.target.value)}
-                      className="rounded-xl"
-                    />
-                  </div>
-                )}
-
-              <div className="space-y-3">
-                {(
-                  [
-                    "Cash",
-                    "GCash",
-                    "Maya",
-                    "Card",
-                    "PayLater",
-                  ] as PaymentMethod[]
-                ).map((method) => (
-                  <Button
-                    key={method}
-                    variant={
-                      selectedPaymentMethod === method ? "default" : "outline"
-                    }
-                    className="h-14 w-full justify-start text-base"
-                    onClick={() => setSelectedPaymentMethod(method)}
-                    disabled={!!settleOrderId && method === "PayLater"}
-                  >
-                    {method === "PayLater" ? "Pay Later (Open Tab)" : method}
-                  </Button>
-                ))}
-              </div>
-
-              {selectedPaymentMethod === "Cash" && (
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Amount Tendered
-                  </label>
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={amountTendered}
-                    onChange={(e) => setAmountTendered(e.target.value)}
-                    className="py-6 text-3xl"
-                  />
-                  {changeDue > 0 && (
-                    <p className="mt-2 text-lg font-semibold text-emerald-600">
-                      Change: ₱{changeDue.toFixed(2)}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  onClick={handleCheckout}
-                  disabled={
-                    isCheckingOut ||
-                    (selectedPaymentMethod === "Cash" && !amountTendered) ||
-                    (!settleOrderId &&
-                      !checkoutOnlineOrderId &&
-                      selectedPaymentMethod === "PayLater" &&
-                      !payLaterCustomerName.trim())
-                  }
-                  className="flex-1 py-7 text-lg"
-                >
-                  {isCheckingOut && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {settleOrderId
-                    ? "Confirm Payment"
-                    : selectedPaymentMethod === "PayLater"
-                      ? "Place on Tab"
-                      : "Confirm Payment"}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1 py-7"
-                  onClick={closeCheckoutModal}
-                  disabled={isCheckingOut}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-        </ModalShell>
-      )}
+        }}
+        onPrint={() => printReceipt()}
+        onFinishWithoutReceipt={finishWithoutReceipt}
+      />
     </div>
   );
 }
