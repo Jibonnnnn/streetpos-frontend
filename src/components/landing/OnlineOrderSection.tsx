@@ -4,12 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { ModalShell } from "@/components/dialogs/ModalShell";
 import { AddonPicker } from "@/components/addons/AddonPicker";
+import { Pagination } from "@/components/common/Pagination";
 import { menuService } from "@/services/menu.service";
 import {
   ordersService,
   type PickupSlotsResponse,
 } from "@/services/orders.service";
 import { getFullImageUrl } from "@/lib/imageUtils";
+import { usePagination } from "@/hooks/usePagination";
 import { toast } from "sonner";
 import {
   Plus,
@@ -24,6 +26,9 @@ import {
 } from "lucide-react";
 import type { MenuItem } from "@/types";
 import type { ModifierGroup } from "@/types/addons";
+
+/** Items per page on the public Order section grid */
+const ORDER_MENU_PAGE_SIZE = 8;
 
 interface OnlineCartItem {
   menuItem: MenuItem;
@@ -214,6 +219,24 @@ export function OnlineOrderSection({
     }
     return list;
   }, [activeItems, activeCategory, search]);
+
+  const {
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalPages,
+    total,
+    paginated,
+    from,
+    to,
+  } = usePagination<MenuItem>(filtered, ORDER_MENU_PAGE_SIZE);
+
+  // Always return to page 1 when category or search changes
+  // (hook already resets on total/pageSize change; this covers same-count filters)
+  useEffect(() => {
+    setPage(1);
+  }, [activeCategory, search, setPage]);
 
   const cartTotal = cartTotals.total;
 
@@ -448,19 +471,33 @@ export function OnlineOrderSection({
         ))}
       </div>
 
-      {/* Menu grid */}
+      {/* Menu grid + pagination */}
       {loading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : total === 0 ? (
         <div className="rounded-3xl border border-dashed border-border/70 py-16 text-center text-muted-foreground">
           No items found.
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map(renderMenuCard)}
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {paginated.map(renderMenuCard)}
+          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            from={from}
+            to={to}
+            onPageChange={setPage}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[8, 12, 16, 24]}
+            className="mt-6"
+          />
+        </>
       )}
 
       {/* Cart drawer / panel */}
