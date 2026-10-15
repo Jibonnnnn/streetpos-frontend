@@ -14,6 +14,7 @@ import CategoriesPage from "@/pages/Categories";
 import PromotionsPage from "@/pages/Promotions";
 import AddonsPage from "@/pages/Addons";
 import { getStoredRole, getStoredToken, homePathForRole } from "@/lib/roles";
+import OrderTrackingPage from "@/pages/OrderTracking";
 
 function CatchAllRedirect() {
   const token = getStoredToken();
@@ -28,6 +29,7 @@ export function AppRouter() {
       <Routes>
         {/* Public */}
         <Route path="/" element={<LandingPage />} />
+        <Route path="/track" element={<OrderTrackingPage />} />
         <Route path="/login" element={<LoginForm />} />
 
         {/* Authenticated app shell */}

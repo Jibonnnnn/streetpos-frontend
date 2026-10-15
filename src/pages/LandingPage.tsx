@@ -18,6 +18,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OnlineOrderSection } from "@/components/landing/OnlineOrderSection";
+import { Link } from "react-router-dom";
+
+function isAppPath(href: string) {
+  return href.startsWith("/") && !href.startsWith("/#");
+}
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
@@ -49,6 +54,7 @@ export default function LandingPage() {
   const nav = [
     { label: "Menu", href: "#menu" },
     { label: "Order", href: "#order" },
+    { label: "Track order", href: "/track" },
     { label: "Story", href: "#story" },
     { label: "Visit", href: "#visit" },
   ];
@@ -80,15 +86,25 @@ export default function LandingPage() {
           </a>
 
           <nav className="hidden items-center gap-8 md:flex">
-            {nav.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className="text-sm font-medium text-zinc-600 transition hover:text-amber-700"
-              >
-                {item.label}
-              </a>
-            ))}
+            {nav.map((item) =>
+              isAppPath(item.href) ? (
+                <Link
+                  key={item.label}
+                  to={item.href}
+                  className="text-sm font-medium text-zinc-600 transition hover:text-amber-700"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className="text-sm font-medium text-zinc-600 transition hover:text-amber-700"
+                >
+                  {item.label}
+                </a>
+              ),
+            )}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -131,16 +147,27 @@ export default function LandingPage() {
         {mobileOpen && (
           <div className="border-t border-zinc-100 bg-white px-4 py-4 md:hidden">
             <div className="flex flex-col gap-2">
-              {nav.map((item) => (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-amber-50"
-                >
-                  {item.label}
-                </a>
-              ))}
+              {nav.map((item) =>
+                isAppPath(item.href) ? (
+                  <Link
+                    key={item.label}
+                    to={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-amber-50"
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-amber-50"
+                  >
+                    {item.label}
+                  </a>
+                ),
+              )}
               <Button
                 onClick={() => scrollTo("order")}
                 className="mt-2 rounded-full bg-amber-600"
