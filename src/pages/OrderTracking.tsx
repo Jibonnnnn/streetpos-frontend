@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ordersService } from "@/services/orders.service";
-import type { OrderTrackingResponse } from "@/types";
+import type { OrderTrackingResponse, OrderTrackingItem } from "@/types";
 import {
   Search,
   Loader2,
@@ -243,7 +243,7 @@ export default function OrderTrackingPage() {
             <div className="rounded-3xl border border-zinc-100 bg-white p-6 shadow-sm">
               <h2 className="font-heading text-lg font-semibold">Items</h2>
               <ul className="mt-4 space-y-3">
-                {data.items.map((item, i) => (
+                {data.items.map((item: OrderTrackingItem, i: number) => (
                   <li
                     key={i}
                     className="flex items-start justify-between gap-3 text-sm"
