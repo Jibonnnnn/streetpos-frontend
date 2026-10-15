@@ -289,3 +289,24 @@ export interface OrderReceiptDto {
   notes?: string | null;
   items: OrderReceiptItemDto[];
 }
+
+export interface OrderTrackingItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  modifiers: string[];
+}
+
+export interface OrderTrackingResponse {
+  orderNumber: string;
+  status: string;
+  statusLabel: string;
+  customerName?: string;
+  total: number;
+  createdAt: string;
+  preferredPickupAt?: string | null;
+  estimatedReadyAt?: string | null;
+  completedAt?: string | null;
+  items: OrderTrackingItem[];
+}
