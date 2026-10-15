@@ -82,4 +82,7 @@ export const ordersService = {
   api.put(`/orders/${id}/status`, JSON.stringify(status), {
     headers: { "Content-Type": "application/json" },
   }),
+
+  trackOrder: (orderNumber: string) =>
+  api.get(`/orders/track/${encodeURIComponent(orderNumber.trim())}`),
 };

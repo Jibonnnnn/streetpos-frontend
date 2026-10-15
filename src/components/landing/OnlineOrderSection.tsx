@@ -382,9 +382,12 @@ export function OnlineOrderSection({
           : null;
       const slot = selectedSlot ? formatSlot(selectedSlot) : null;
 
+      const orderNumber =
+        typeof order?.orderNumber === "string" ? order.orderNumber : undefined;
+
       toast.success("Order placed successfully!", {
         description: [
-          order?.orderNumber ? `Order ${order.orderNumber}` : null,
+          orderNumber ? `Order ${orderNumber}` : null,
           eta ? `Ready ~${eta}` : null,
           slot ? `Pickup ${slot}` : null,
           phoneNumber.trim() || customerEmail.trim()
@@ -393,6 +396,17 @@ export function OnlineOrderSection({
         ]
           .filter(Boolean)
           .join(" · "),
+        duration: 10_000,
+        action: orderNumber
+          ? {
+              label: "Track",
+              onClick: () => {
+                window.location.assign(
+                  `/track?order=${encodeURIComponent(orderNumber)}`,
+                );
+              },
+            }
+          : undefined,
       });
 
       setCart([]);
