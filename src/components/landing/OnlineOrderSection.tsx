@@ -82,6 +82,22 @@ function formatSlot(iso: string) {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+/** Max units that can be sold given current inventory links. null = no limit. */
+function getMaxOrderable(item: MenuItem): number | null {
+  const links = item.inventoryLinks ?? [];
+  if (links.length === 0) return null;
+
+  let max = Number.POSITIVE_INFINITY;
+  for (const link of links) {
+    const perUnit = Number(link.quantityUsedPerUnit) || 0;
+    const stock = Number(link.currentStock ?? 0);
+    if (perUnit <= 0) continue;
+    max = Math.min(max, Math.floor(stock / perUnit));
+  }
+  if (!Number.isFinite(max)) return null;
+  return Math.max(0, max);
+}
+
 export function OnlineOrderSection({
   selectedCategory = null,
   onCategoryApplied,
@@ -249,12 +265,14 @@ export function OnlineOrderSection({
     addToCart(item, [], Number(item.price), []);
   };
 
-  const addToCart = (
+    const addToCart = (
     item: MenuItem,
     selectedModifierOptionIds: number[],
     unitPrice: number,
     selectedOptionLabels: string[],
   ) => {
+    const max = getMaxOrderable(item);
+
     setCart((prev) => {
       const idx = prev.findIndex(
         (c) =>
@@ -262,11 +280,27 @@ export function OnlineOrderSection({
           JSON.stringify(c.selectedModifierOptionIds) ===
             JSON.stringify(selectedModifierOptionIds),
       );
+
       if (idx >= 0) {
+        const nextQty = prev[idx].quantity + 1;
+        if (max !== null && nextQty > max) {
+          toast.error(
+            max === 0
+              ? `"${item.name}" is out of stock`
+              : `Only ${max} × "${item.name}" available`,
+          );
+          return prev;
+        }
         const next = [...prev];
-        next[idx] = { ...next[idx], quantity: next[idx].quantity + 1 };
+        next[idx] = { ...next[idx], quantity: nextQty };
         return next;
       }
+
+      if (max !== null && max < 1) {
+        toast.error(`"${item.name}" is out of stock`);
+        return prev;
+      }
+
       return [
         ...prev,
         {
@@ -282,14 +316,31 @@ export function OnlineOrderSection({
     setAddonItem(null);
   };
 
-  const updateQty = (index: number, qty: number) => {
+    const updateQty = (index: number, qty: number) => {
     if (qty < 1) {
       setCart((prev) => prev.filter((_, i) => i !== index));
       return;
     }
-    setCart((prev) =>
-      prev.map((c, i) => (i === index ? { ...c, quantity: qty } : c)),
-    );
+
+    setCart((prev) => {
+      const item = prev[index];
+      if (!item) return prev;
+
+      const max = getMaxOrderable(item.menuItem);
+      if (max !== null && qty > max) {
+        toast.error(
+          max === 0
+            ? `"${item.menuItem.name}" is out of stock`
+            : `Only ${max} × "${item.menuItem.name}" available`,
+        );
+        qty = max;
+        if (qty < 1) {
+          return prev.filter((_, i) => i !== index);
+        }
+      }
+
+      return prev.map((c, i) => (i === index ? { ...c, quantity: qty } : c));
+    });
   };
 
   const removeFromCart = (index: number) => {
@@ -539,7 +590,7 @@ export function OnlineOrderSection({
                         ₱{(item.unitPrice * item.quantity).toFixed(2)}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-1">
                       <Button
                         variant="outline"
                         size="icon"
@@ -555,6 +606,10 @@ export function OnlineOrderSection({
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 rounded-xl"
+                        disabled={(() => {
+                          const max = getMaxOrderable(item.menuItem);
+                          return max !== null && item.quantity >= max;
+                        })()}
                         onClick={() => updateQty(idx, item.quantity + 1)}
                       >
                         <Plus className="h-3.5 w-3.5" />

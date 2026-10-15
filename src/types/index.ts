@@ -38,6 +38,7 @@ export interface MenuItemInventoryLink {
   inventoryItemName: string;
   unit: string;
   quantityUsedPerUnit: number;
+  currentStock?: number;
 }
 
 export interface MenuItemInventoryLinkRequest {
