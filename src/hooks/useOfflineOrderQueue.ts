@@ -87,11 +87,11 @@ export function useOfflineOrderQueue() {
       wasOffline.current = true;
       return;
     }
-    if (wasOffline.current || pendingCount > 0) {
+    if (wasOffline.current) {
       wasOffline.current = false;
       void runSync();
     }
-  }, [isOnline, pendingCount, runSync]);
+  }, [isOnline, runSync]);
 
   useEffect(() => {
     const onVisible = () => {
