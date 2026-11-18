@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { CartItem } from '@/types';
 
 interface CartContextType {
@@ -13,7 +13,14 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('streetpos_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const addToCart = (item: CartItem) => {
     setCart((prev) => [...prev, item]);
@@ -27,16 +34,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (newQuantity < 1) return;
 
     setCart((prev) => {
+      const item = prev[index];
+      if (!item) return prev;
+
+      const unitPrice = item.quantity > 0 ? item.itemTotal / item.quantity : item.itemTotal;
+
       const updated = [...prev];
-      const item = updated[index];
-
-      // Calculate unit price (in case quantity was already > 1)
-      const unitPrice = item.itemTotal / item.quantity;
-
       updated[index] = {
         ...item,
         quantity: newQuantity,
-        itemTotal: unitPrice * newQuantity,
+        itemTotal: Math.round(unitPrice * newQuantity * 100) / 100,
       };
 
       return updated;
@@ -45,7 +52,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = () => setCart([]);
 
-  const total = cart.reduce((sum, item) => sum + item.itemTotal, 0);
+  useEffect(() => {
+    try {
+      localStorage.setItem('streetpos_cart', JSON.stringify(cart));
+    } catch {
+      // ignore
+    }
+  }, [cart]);
+
+  const total = Math.round(cart.reduce((sum, item) => sum + item.itemTotal, 0) * 100) / 100;
 
   return (
     <CartContext.Provider
