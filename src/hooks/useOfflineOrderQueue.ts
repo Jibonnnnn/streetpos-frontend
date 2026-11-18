@@ -37,6 +37,8 @@ export function useOfflineOrderQueue() {
   const runSync = useCallback(async (): Promise<SyncResult | null> => {
     if (!navigator.onLine) return null;
     setIsSyncing(true);
+    const startedAt = Date.now();
+    const MIN_DISPLAY_MS = 1500;
     try {
       const result = await syncOfflineOrderQueue();
       await refresh();
@@ -57,6 +59,12 @@ export function useOfflineOrderQueue() {
       console.error("[offline-sync]", err);
       return null;
     } finally {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_DISPLAY_MS) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, MIN_DISPLAY_MS - elapsed),
+        );
+      }
       setIsSyncing(false);
     }
   }, [refresh]);
