@@ -104,7 +104,14 @@ export function OnlineOrderSection({
 }: OnlineOrderSectionProps) {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cart, setCart] = useState<OnlineCartItem[]>([]);
+  const [cart, setCart] = useState<OnlineCartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('streetpos_online_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [showCart, setShowCart] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
@@ -151,6 +158,14 @@ export function OnlineOrderSection({
     setSearch("");
     onCategoryApplied?.();
   }, [selectedCategory, onCategoryApplied]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('streetpos_online_cart', JSON.stringify(cart));
+    } catch {
+      // ignore
+    }
+  }, [cart]);
 
   const cartTotals = useMemo(() => {
     const quantity = cart.reduce((s, c) => s + c.quantity, 0);
