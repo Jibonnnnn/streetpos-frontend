@@ -505,7 +505,7 @@ export function OnlineOrderSection({
           >
             <ShoppingBag className="h-4 w-4" />
             {cart.length > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+              <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
                 {cart.reduce((s, c) => s + c.quantity, 0)}
               </span>
             )}
