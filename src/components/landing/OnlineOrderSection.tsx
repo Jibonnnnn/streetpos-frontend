@@ -500,12 +500,12 @@ export function OnlineOrderSection({
           </div>
           <Button
             variant="outline"
-            className="relative rounded-2xl"
+            className="flex items-center gap-2 rounded-2xl px-3"
             onClick={() => setShowCart(true)}
           >
             <ShoppingBag className="h-4 w-4" />
             {cart.length > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs font-bold text-white">
                 {cart.reduce((s, c) => s + c.quantity, 0)}
               </span>
             )}

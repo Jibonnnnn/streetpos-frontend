@@ -87,12 +87,12 @@ export function SiteHeader({
           <button
             type="button"
             onClick={onCartClick}
-            className="relative rounded-xl p-2 text-zinc-600 transition hover:bg-amber-50 hover:text-amber-700"
+            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-zinc-600 transition hover:bg-amber-50 hover:text-amber-700"
             aria-label="Open cart"
           >
             <ShoppingBag className="h-5 w-5" />
             {cartCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-bold text-white ring-2 ring-white">
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-600 px-1.5 text-xs font-bold text-white">
                 {cartCount}
               </span>
             )}
